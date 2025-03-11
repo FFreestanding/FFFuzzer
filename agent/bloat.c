@@ -27,11 +27,11 @@ size_t min_addr=-1;
 size_t max_addr;
 int bloated;
 
-// initialize user fault
+//# initialize user fault
 static void uffd_setup(void){
     struct uffdio_api uffdio_api;
     int tmpfd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
-    uffd = dup2(tmpfd, 100);//设置uffd为100
+    uffd = dup2(tmpfd, 100);//# 设置uffd为100
     close(tmpfd);
     debug_printf("UFFD is %d\n", uffd);
     if(uffd == -1){
@@ -46,19 +46,19 @@ static void uffd_setup(void){
     }
 }
 
-// register memory region
+//# register memory region
 static void uffd_register(size_t start, size_t len, int mode){
     struct uffdio_register uffdio_register;
     uffdio_register.range.start = start;
     uffdio_register.range.len = len;
-    uffdio_register.mode = UFFDIO_REGISTER_MODE_MISSING;//handle missing page faults
+    uffdio_register.mode = UFFDIO_REGISTER_MODE_MISSING;//# handle missing page faults
     if (ioctl(uffd, UFFDIO_REGISTER, &uffdio_register) == -1){
         printf("ioctl-UFFDIO_REGISTER\n");
         exit(1);
     }
 }
 
-// 在线程中监听 userfaultfd 事件，处理页面错误并注入模糊测试输入
+//# 在线程中监听 userfaultfd 事件，处理页面错误并注入模糊测试输入
 static void* uffd_worker(void* param){
     static int fault_cnt;
     static struct uffd_msg msg;   /* Data read from userfaultfd */
@@ -85,7 +85,7 @@ static void* uffd_worker(void* param){
         int nready;
         pollfd.fd = uffd;
         pollfd.events = POLLIN;
-        nready = poll(&pollfd, 1, -1); // 使用 poll 等待页面错误事件，从 uffd 读取消息（msg）
+        nready = poll(&pollfd, 1, -1); //# 使用 poll 等待页面错误事件，从 uffd 读取消息（msg）
         if (nready == -1){
             printf("poll\n");
             exit(1);
@@ -111,7 +111,7 @@ static void* uffd_worker(void* param){
         /* Display info about the page-fault event. */
 
         // Is it a write?
-        // 如果是写操作（UFFD_PAGEFAULT_FLAG_WRITE），用零页填充（UFFDIO_ZEROPAGE）
+        //# 如果是写操作（UFFD_PAGEFAULT_FLAG_WRITE），用零页填充（UFFDIO_ZEROPAGE）
         if(msg.arg.pagefault.flags & UFFD_PAGEFAULT_FLAG_WRITE) {
             debug_printf("%s","UFFD Write... Skipping\n");
             uffdio_zeropage.range.start = (unsigned long) msg.arg.pagefault.address &
@@ -122,7 +122,7 @@ static void* uffd_worker(void* param){
         }
 
         // Does it match with a CFU cb?
-        // CFU copy from user
+        //# CFU: copy from user
         if(msg.arg.pagefault.address >= (ignore_addr & 0x000) && msg.arg.pagefault.address <= (ignore_addr_end | 0xFFF)){
             debug_printf("%s","IN_CFU... Skipping\n");
             uffdio_zeropage.range.start = (unsigned long) msg.arg.pagefault.address &
@@ -136,12 +136,12 @@ static void* uffd_worker(void* param){
         /* Copy the page pointed to by 'page' into the faulting
            region. Vary the contents that are copied in, so that it
            is more obvious that each fault is handled separately. */
-        // 在输入流中查找分隔符 FUZZ（长度 4 字节），如果找到，将 input_cursor 移动到分隔符后
+        //# 在输入流中查找分隔符 FUZZ（长度 4 字节），如果找到，将 input_cursor 移动到分隔符后
         if(!ic_advance_until_token(SEPARATOR, 4))
             ic_insert(SEPARATOR, 4, ic_get_cursor());
         pattern p;
         p.len = 100;
-        p.data = ic_ingest_buf(&p.len, SEPARATOR, 4, 20, 0);//从输入流中提取或生成数据
+        p.data = ic_ingest_buf(&p.len, SEPARATOR, 4, 20, 0);//# 从输入流中提取或生成数据
         p.index = 0;
         p.stride = 0;
 
@@ -174,13 +174,13 @@ static void uffd_start(void){
     }
 }
 
-// 负责初始化 userfaultfd 并通过多次调用 mmap 分配大块匿名内存，将这些内存区域注册到 userfaultfd 以捕获页面错误
+//# 负责初始化 userfaultfd 并通过多次调用 mmap 分配大块匿名内存，将这些内存区域注册到 userfaultfd 以捕获页面错误
 void bloatme(void){
     uint64_t sz = 4096;
 
     uffd_setup();
     uffd_start();
-    // 只是测试最大分配能力
+    //# 只是测试最大分配能力
     for(int i=0; i<64; i++){
         printf("Trying: %lx... ", sz);
         void *ret = mmap(NULL, sz, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE, -1, 0);
@@ -203,7 +203,7 @@ void bloatme(void){
         void *ret = mmap(NULL, sz, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE, -1, 0);
         if(ret != MAP_FAILED && ret){
             printf("Success! %p\n", ret);
-            // 扩大地址包含的范围
+            //# 扩大地址包含的范围
             if(ret < (void*)min_addr)
                 min_addr = (size_t)ret;
             if((size_t)ret + sz > max_addr)
