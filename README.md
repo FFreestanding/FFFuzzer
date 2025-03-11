@@ -8,7 +8,9 @@
 
 The new features include:
 
-- [ ] web
+- [ ] Web data dashboard
+- [ ] Comments starting with `//#`
+- [ ] Code optimization
 
 # Instructions
 These instructions were tested on Ububtu22. A CPU with VT-x support is preferable.

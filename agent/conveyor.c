@@ -40,13 +40,19 @@ void ic_new_input(uint8_t* in, size_t len) {
     last_token = output;
 }
 
+//# get offset of head
 size_t ic_get_cursor(void){
     return output_cursor - output;
 }
+
+//# get offset of last_token
 size_t ic_get_last_token(void){
-    return last_token-output;
+    return last_token - output;
 }
 
+//# 计算从下一个token到下下个token之间的数据长度。
+//# 如果没有下下个，就返回末尾到下个token结尾的距离
+//# 没有下个，返回0
 size_t ic_lookahead(uint8_t* token, size_t token_len) { 
     size_t ret = 0;
     uint8_t *next_token = memmem(input_cursor,
@@ -64,6 +70,7 @@ size_t ic_lookahead(uint8_t* token, size_t token_len) {
     return after_next_token - next_token - token_len;
 }
 
+//# 从output_cursor开始写入，并返回移动后的output_cursor
 static inline void* append(void* src, size_t len){
     if(!(output_cursor && output_cursor - output + len < bufsize)){
         debug_printf("append: %s", "Assert: (output_cursor && output_cursor - output + len < bufsize)\n");
@@ -75,6 +82,7 @@ static inline void* append(void* src, size_t len){
     return output_cursor;
 }
 
+//# 在一个pos开始插入数据，移动output_cursor
 void* ic_insert(void* src, size_t len, size_t pos){
     if(!(output_cursor && output_cursor - output + len < bufsize)) {
         debug_printf("ic_insert: %s", "Assert: (output_cursor && output_cursor - output + len < bufsize)\n");
@@ -95,6 +103,7 @@ void* ic_insert(void* src, size_t len, size_t pos){
     return output_cursor;
 }
 
+//# 移动input_cursor，获得input_cursor移动前指向的数据
 static inline void* size_ptr(size_t len){
     if (input_cursor + len > input + input_len)
         return NULL;
@@ -104,12 +113,14 @@ static inline void* size_ptr(size_t len){
 
 // Return a "cannonical input": one with extraneous bytes removed, and missing
 // bytes inserted (where needed).
+//# 设置 output 、 output_len
 void ic_output(uint8_t *out, size_t *len, size_t max_len)
 {
     output = out;
     output_len = len;
 }
 
+//# 从input_cursor提取 8/16/32/64 位数据，约束到 [min, max] 范围并追加到输出
 int ic_ingest8(uint8_t *result, uint8_t min, uint8_t max) {
     void *src = size_ptr(sizeof(uint8_t));
     assert(max > min);
@@ -159,6 +170,8 @@ int ic_ingest64(uint64_t *result, uint64_t min, uint64_t max) {
     return -1;
 }
 
+//# 从input_cursor提取数据直到分隔符，写入output_cursor，若不足则填充随机数据
+//# 返回output_cursor，第一个参数修改为实际填充长度
 uint8_t* ic_ingest_buf(size_t *len, uint8_t* token, size_t token_len, int minlen, int string) {
     debug_printf("INGEST: %ld %d. CURSOR: %p INPUT_END: %p\n", *len, minlen, input_cursor, input+input_len);
     uint8_t *result = output_cursor;
@@ -186,7 +199,7 @@ uint8_t* ic_ingest_buf(size_t *len, uint8_t* token, size_t token_len, int minlen
     debug_printf("UNTIL_TOKEN_LEN: %ld\n", until_token_len);
     // First try to read data from the actual buffer (until token)
     uint8_t* ret = size_ptr(until_token_len);
-    if(ret) { 
+    if(ret) {
         append(ret, until_token_len);
         filled += until_token_len;
         remaining_len -= until_token_len;
@@ -197,11 +210,12 @@ uint8_t* ic_ingest_buf(size_t *len, uint8_t* token, size_t token_len, int minlen
     if(minlen != -1 && remaining_len + filled > minlen) {
         if(minlen > filled)
             remaining_len = minlen - filled;
-        else 
+        else
             remaining_len = 0;
     }
     srand(__rdtsc());
-    memset(zeros, 0, remaining_len);
+    //# don't need to clear
+    //# memset(zeros, 0, remaining_len);
 
     if(string) { // Fill it with random ascii
         for(int i=0; i<remaining_len && remaining_len; i++){
@@ -227,6 +241,9 @@ uint8_t* ic_ingest_buf(size_t *len, uint8_t* token, size_t token_len, int minlen
     return result;
 }
 
+//# 写入第一个参数到output_cursor，修改input_cursor到下一个token结尾后
+//# last_token更新为output_cursor开始写入的位置
+//# 返回input中下一个token位置
 void *ic_advance_until_token(uint8_t* token, size_t len) {
     uint8_t* token_position = memmem(input_cursor,
             input + input_len - input_cursor,
@@ -239,6 +256,8 @@ void *ic_advance_until_token(uint8_t* token, size_t len) {
     return token_position;
 }
 
+//# 返回token_position到input_cursor的长度
+//# 错误时返回-1
 size_t ic_length_until_token(uint8_t* token, size_t len) {
     uint8_t* token_position = memmem(input_cursor,
             input + input_len - input_cursor,
@@ -251,6 +270,8 @@ size_t ic_length_until_token(uint8_t* token, size_t len) {
 }
 
 // Erase until the last token 
+//# output_cursor更新为last_token
+//# 修改output_len为output到output_cursor的长度
 void ic_erase_backwards_until_token(void) {
     if(last_token) {
         output_cursor = last_token;
