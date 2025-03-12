@@ -6,7 +6,7 @@ diff -urN linux-6.1/arch/x86/entry/common.c kernel/arch/x86/entry/common.c
  __visible noinstr void do_syscall_64(struct pt_regs *regs, int nr)
  {
 +    int fe = current->fuzz_enabled;
-+    current->fuzz_enabled = 0;
++    current->fuzz_enabled = 0; //# 防止系统调用本身的 copy_from_user 触发钩子。
  	add_random_kstack_offset();
  	nr = syscall_enter_from_user_mode(regs, nr);
  
@@ -197,7 +197,7 @@ diff -urN linux-6.1/include/linux/sched.h kernel/include/linux/sched.h
  	/* Collect coverage from softirq context: */
  	unsigned int			kcov_softirq;
  #endif
-+    int fuzz_enabled;
++    int fuzz_enabled;//# 给task_struct添加，管理每一个线程
 +    void* fuzz_dev;
  
  #ifdef CONFIG_MEMCG
@@ -211,7 +211,7 @@ diff -urN linux-6.1/include/linux/uaccess.h kernel/include/linux/uaccess.h
  		return n;
 +    if(fuzz_copy_from_user_cb((size_t)to, n, 1)){
 +        return 0;
-+    }
++    }//# 修改__copy_to_user和_copy_from_user
  	instrument_copy_to_user(to, from, n);
  	check_object_size(from, n, true);
  	return raw_copy_to_user(to, from, n);
@@ -346,7 +346,7 @@ diff -urN linux-6.1/kernel/fuzzer_dev.c kernel/kernel/fuzzer_dev.c
 +
 +    int wait_queue_flag;
 +	struct wait_queue_head	cfu_poll_wq;
-+    struct completion cfu_completion;
++    struct completion cfu_completion;//# linux-6.1/Documentation/scheduler/completion.rst
 +    struct mutex cfu_mutex;
 +    struct cfu_details cfu_details;
 +} fuzzer_dev;
@@ -486,7 +486,7 @@ diff -urN linux-6.1/kernel/fuzzer_dev.c kernel/kernel/fuzzer_dev.c
 +    } else {
 +        if (__virt_addr_valid(addr))
 +            goto out;
-+        vma = vma_lookup(current->mm, addr);
++        vma = vma_lookup(current->mm, addr);//# 查找地址对应的虚拟内存区域
 +        if (!vma)
 +            goto out;
 +        if(!(vma->vm_flags & VM_WRITE))
@@ -504,7 +504,7 @@ diff -urN linux-6.1/kernel/fuzzer_dev.c kernel/kernel/fuzzer_dev.c
 +		d->wait_queue_flag = 1;
 +		wake_up_interruptible(&d->cfu_poll_wq);
 +
-+		wait_for_completion(&d->cfu_completion);
++		wait_for_completion(&d->cfu_completion);//# 在wait函数中循环等待done变为可用
 +        mutex_unlock(&d->cfu_mutex);
 +        debug_printk("CFUCB DONE: %lx %lx\n", addr, len);
 +    }
@@ -564,7 +564,7 @@ diff -urN linux-6.1/kernel/fuzzer_dev.c kernel/kernel/fuzzer_dev.c
 +    return SUCCESS;
 +}
 +
-+void fuzz_track_show_trace(void) {
++void fuzz_track_show_trace(void) {//# 让qemu恢复快照
 +    outl(1,  FUZZ_BASE + FUZZ_DEVICE_SHOW_TRACE);
 +}
 +
@@ -598,7 +598,7 @@ diff -urN linux-6.1/kernel/fuzzer_dev.c kernel/kernel/fuzzer_dev.c
 +        d->fd_duped = 0;
 +        if (d->kcov_addr && current->kcov) {
 +            d->kcov_vma->vm_flags &= ~VM_WRITE;
-+            vma_set_page_prot(d->kcov_vma);
++            vma_set_page_prot(d->kcov_vma);//# 将 KCOV 区域的页面设置为只读
 +        }
 +        break;
 +    case STOPWATCH:
@@ -606,7 +606,7 @@ diff -urN linux-6.1/kernel/fuzzer_dev.c kernel/kernel/fuzzer_dev.c
 +        debug_printk("%s", "STOPWATCH\n");
 +        if (d->kcov_addr && current->kcov) {
 +            d->kcov_vma->vm_flags |= VM_WRITE;
-+            vma_set_page_prot(d->kcov_vma);
++            vma_set_page_prot(d->kcov_vma);//# 可以收集KCOV，允许写入内存
 +        }
 +        break;
 +    case FUZZINGSTAGE:
@@ -620,7 +620,7 @@ diff -urN linux-6.1/kernel/fuzzer_dev.c kernel/kernel/fuzzer_dev.c
 +     * Set the reverse fd offset (used to fill dups), relative to the order in
 +     * which the fds were opened.
 +     */
-+        if(d->open_fds_len) {
++        if(d->open_fds_len) {//# 用于从已打开文件描述符列表的末尾倒数选择某个 FD 来执行 dup
 +            d->reverse_fd_offset = (arg % d->open_fds_len);
 +            debug_printk("Returning FD offset %d\n", d->open_fds_len - d->reverse_fd_offset - 1);
 +            return d->open_fds_len - d->reverse_fd_offset - 1;
@@ -638,7 +638,7 @@ diff -urN linux-6.1/kernel/fuzzer_dev.c kernel/kernel/fuzzer_dev.c
 +            debug_printk("fuzz: cfu failed %lx %lx\n", argp, sizeof(d->cfu_details));
 +        break;
 +    case COMPLETE_CFU:
-+        complete(&d->cfu_completion);
++        complete(&d->cfu_completion);//# 将done加一，唤醒待处理的函数
 +        break;
 +    }
 +    return 0;

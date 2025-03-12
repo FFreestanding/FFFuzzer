@@ -22,7 +22,7 @@ Install Requirements:
 sudo apt-get install git libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev ninja-build
 
 # Kernel:
-sudo apt-get install build-essential linux-source bc kmod cpio flex libncurses5-dev libelf-dev libssl-dev dwarves bison
+sudo apt-get install build-essential linux-source bc kmod cpio flex libncurses5-dev libelf-dev libssl-dev dwarves bison libcap-ng-dev libattr1-dev
 
 # Misc:
 sudo apt install clang-15 debootstrap qemu-utils

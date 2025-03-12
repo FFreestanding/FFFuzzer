@@ -20,10 +20,10 @@ typedef struct fdconf {
 } fdconf;
 
 typedef struct scconf {
-    int nr;
-    int args;
+    int nr;//# 系统调用号
+    int args;//# 参数个数
     int mask_enabled;
-    uint64_t mask[6];
+    uint64_t mask[6];//# 与运算，过滤
     int min_enabled;
     uint64_t min[6];
     int identity_arg;

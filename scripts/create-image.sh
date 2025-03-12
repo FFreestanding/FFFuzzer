@@ -128,7 +128,7 @@ if [ $FEATURE = "full" ]; then
     PREINSTALL_PKGS=$PREINSTALL_PKGS","$ADD_PACKAGE
 fi
 
-sudo rm -rf $DIR
+# sudo rm -rf $DIR
 sudo mkdir -p $DIR
 sudo chmod 0755 $DIR
 

@@ -321,7 +321,7 @@ index 0000000000..eb5ab555c2
 +
 +static void crash_handler(void)
 +{
-+    if (!getenv("PRINT_CRASHES"))
++    if (!getenv("PRINT_CRASHES"))//# fuck
 +        return;
 +
 +    printf("Crashing Input: ");
@@ -465,7 +465,7 @@ index 0000000000..eb5ab555c2
 +                     qemu_clock_get_ns(QEMU_CLOCK_HOST) + timeout);
 +        memcpy(input_region, &fuzz_input_size, sizeof(fuzz_input_size));
 +        memcpy(input_region + sizeof(fuzz_input_size), fuzz_input,
-+               fuzz_input_size);
++               fuzz_input_size);//# 获得fuzz的输入数据
 +        break;
 +    case FUZZ_DEVICE_ADD_PFN_BASE:
 +        break;
@@ -625,7 +625,7 @@ index 0000000000..eb5ab555c2
 +{
 +    // Mutate the input and copy data into guest
 +    // fuzz_input = Data;
-+    memcpy(fuzz_input, Data, Size);
++    memcpy(fuzz_input, Data, Size);//# 接收 libFuzzer 生成的比特序列
 +    fuzz_input_size = Size;
 +    last_kcov = 0;
 +

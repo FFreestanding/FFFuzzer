@@ -56,6 +56,7 @@ int tracepc;
 static int abort_errors;
 int pattern_allocs;
 
+//# 有规律地填充数据
 void pattern_alloc(void* ptr, size_t len, pattern p)
 {
     int i;
@@ -80,13 +81,14 @@ uint64_t do_syscall(const scconf* sc, uint32_t* args)
     pattern_allocs = 0;
     debug_printf(">>> syscall(%x, %x, %x, %x, %x, %x, %x) = \n", sc->nr, args[0], args[1],
             args[2], args[3], args[4], args[5]);
-    driver_watch();
+    driver_watch();//# 开始fuzz
     ret = syscall(sc->nr, args[0], args[1], args[2], args[3], args[4], args[5]);
     driver_stopwatch();
     debug_printf(" = %ld\n", ret);
     return ret;
 }
 
+//# 写入信息
 static void new_syscall(uint64_t id, int start, int end, int success, uint32_t runtime, uint32_t n_copy_from_user) {
     if(syscall_log.len >= sizeof(syscall_log.data)/sizeof(syscall_log.data[0])) {
         debug_printf("%s", "Too many syscalls for the log\n");
@@ -102,6 +104,7 @@ static void new_syscall(uint64_t id, int start, int end, int success, uint32_t r
     syscall_log.len++;
 }
 
+// 替换信息
 static void replace_syscall(uint64_t id, int start, int end, int success, uint32_t runtime, uint32_t n_copy_from_user) {
     syscall_log.len--;
     new_syscall(id,start,end,success,runtime, n_copy_from_user);
@@ -114,11 +117,11 @@ static int op_syscall(int nr)
 {
     uint32_t args[7] = {0};
     uint64_t ret;
-    const scconf *sc = &conf_scs[nr];
+    const scconf *sc = &conf_scs[nr];//# 获得指定系统调用号的配置
     int i;
 
     uint16_t start = ic_get_last_token();
-
+    //# 随机生成参数
     for(i = 0; (i < sc->args); i++){
 	    if(sc->mask_enabled){
 		    if(ic_ingest32(&args[i], 0, -1, sc->mask[i])){
@@ -151,15 +154,18 @@ static int op_syscall(int nr)
 
     if(sc->nr != SYS_mmap && sc->nr != SYS_bpf && sc->nr != __NR_io_uring_setup && sc->nr != SYS_eventfd && args[0] < 3)
         return -1;
+
     if(fd_offset){
         driver_set_reverse_fd_offset(fd_offset);
     }
+
     ret = do_syscall(sc, args);
 
     if(ret == -1)
         fd_offset = fd_offset ? 0 : 1;
     int remaining = -1;
     
+    //# 尝试不同文件描述符
     while(ret == (uint64_t)-1 && LOOP_OVER_FDS && remaining && !abort_errors){
         remaining = driver_set_reverse_fd_offset(fd_offset);
         ret = do_syscall(sc, args);

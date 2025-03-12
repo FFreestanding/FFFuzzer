@@ -1,4 +1,9 @@
-images
+images/
 CORPUS/
-log
+logs/
 crash-*
+kernel-build/
+qemu-build/
+kernel/
+qemu/
+libfuzzer-ng/libFuzzer.a

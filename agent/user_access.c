@@ -22,7 +22,7 @@ extern int bloated;
 extern uint64_t *kcov_data;
 extern size_t kcov_size;
 
-static void *user_access_worker(void* opaque){
+static void *user_access_worker(void* opaque) {
     int fd = *(int*)opaque;
     while(!bloated);
     printf(".bloated\n");
@@ -32,20 +32,19 @@ static void *user_access_worker(void* opaque){
         int nready;
         pollfd.fd = fd;
         pollfd.events = POLLIN;
-        nready = poll(&pollfd, 1, -1);
+        nready = poll(&pollfd, 1, -1); //# 等待事件
         if (nready == -1){
-            printf("%s\n","poll\n");
-        _Exit(1);
+            printf("poll\n");
+            _Exit(1);
         }
 
-        struct cfu_details details = driver_get_cfu_details();
+        struct cfu_details details = driver_get_cfu_details(); //# IOCTL 获取详情
         debug_printf("CFU: %p +%lx\n", details.addr, details.len);
         if((size_t)details.addr >= min_addr && (size_t)details.addr + details.len <= max_addr &&
 				!( (size_t)details.addr <= (size_t)kcov_data + kcov_size && (size_t)kcov_data <= (size_t)details.addr + details.len)){
             ignore_addr = (size_t)details.addr;
             ignore_addr_end = (size_t)details.addr + details.len;
 
-            
             pattern p;
             int min;
             if(details.len>4096) {
@@ -78,11 +77,11 @@ static void *user_access_worker(void* opaque){
                 }
                 printf("\n");
             }
-            pattern_alloc(details.addr, details.len, p);
+            pattern_alloc(details.addr, details.len, p); //# 填充数据
             ignore_addr = 0;
             ignore_addr_end = 0;
         }
-        driver_complete_cfu();
+        driver_complete_cfu(); //# 通知内核完成
     }
 }
 

@@ -41,15 +41,6 @@ for i in $(seq "$1"); do
  sleep 1;
 done
 
-cat << 'EOF'
-oooooooooooo                                   ooooo      ooo   .oooooo.    
-`888'     `8                                   `888b.     `8'  d8P'  `Y8b   
- 888         oooo  oooo    oooooooo   oooooooo  8 `88b.    8  888           
- 888oooo8    `888  `888   d'""7d8P   d'""7d8P   8   `88b.  8  888           
- 888    "     888   888     .d8P'      .d8P'    8     `88b.8  888     ooooo 
- 888          888   888   .d8P'  .P  .d8P'  .P  8       `888  `88.    .88'  
-o888o         `V88V"V8P' d8888888P  d8888888P  o8o        `8   `Y8bood8P'  
-EOF
 echo "Initialized $1 Workers with Config: $2"
 sleep 1
 ls -tr "$LOGS_DIR"/*/output | tail -n"$1" | xargs tail -fq
