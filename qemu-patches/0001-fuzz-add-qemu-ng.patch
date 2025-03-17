@@ -1,7 +1,7 @@
-From 474af890082a91c45a16edccf197ee9e8d1d1c1c Mon Sep 17 00:00:00 2001
+From 036f60724c9e443f558a047ea83e37279a4f6619 Mon Sep 17 00:00:00 2001
 From: Alexander Bulekov <alxndr@bu.edu>
 Date: Sun, 4 Jun 2023 09:51:49 -0400
-Subject: [PATCH] fuzz: add qemu-ng
+Subject: [PATCH 1/2] fuzz: add qemu-ng
 
 ---
  accel/kvm/kvm-all.c          |  39 +-
@@ -89,7 +89,7 @@ index cf3a88d90e..d13a63decf 100644
          s->manual_dirty_log_protect = dirty_log_manual_caps;
 diff --git a/hw/i386/fuzz.c b/hw/i386/fuzz.c
 new file mode 100644
-index 0000000000..eb5ab555c2
+index 0000000000..566c961e20
 --- /dev/null
 +++ b/hw/i386/fuzz.c
 @@ -0,0 +1,728 @@
@@ -1146,5 +1146,5 @@ index 4d10b47b8f..89ea2c8812 100644
  
  specific_fuzz_ss.add(fuzz_ld)
 -- 
-2.39.0
+2.34.1
 

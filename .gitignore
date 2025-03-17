@@ -6,4 +6,10 @@ kernel-build/
 qemu-build/
 kernel/
 qemu/
+work_dir/
+web/target/
+web/Cargo.lock
 libfuzzer-ng/libFuzzer.a
+agent/*.o
+agent/fuzz
+web/config.toml

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust Backend Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .status-container {
+            max-width: 800px;
+            margin: 0 auto;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .last-updated {
+            text-align: center;
+            padding: 10px;
+            background-color: #f2f2f2;
+            font-size: 12px;
+            color: #666;
+        }
+        .error-message {
+            color: red;
+            text-align: center;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="status-container">
+        <h1>FFFuzzer Status</h1>
+        <table id="status-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data will be inserted here by JavaScript -->
+            </tbody>
+        </table>
+        <div class="last-updated">Last updated: <span id="last-updated-time"></span></div>
+    </div>
+
+    <script>
+        // Function to fetch data from the Rust backend
+        async function fetchData() {
+            try {
+                // const response = await fetch('http://localhost:8080/status'); 
+                const response = await fetch('/status');// Replace with your Rust backend URL
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                updateTable(data);
+                // document.querySelector('.error-message').textContent = '';
+            } catch (error) {
+                // console.log(error)
+                document.querySelector('.error-message').textContent = `Error fetching data: ${error.message}`;
+            } finally {
+                document.getElementById('last-updated-time').textContent = new Date().toLocaleTimeString();
+            }
+        }
+
+        // Function to update the table with new data
+        function updateTable(data) {
+            const tableBody = document.querySelector('#status-table tbody');
+            tableBody.innerHTML = ''; // Clear existing rows
+
+            // Insert new rows
+            for (const [metric, value] of Object.entries(data)) {
+                const row = document.createElement('tr');
+                // console.log(data);
+                row.innerHTML = `
+                    <td>${metric}</td>
+                    <td>${value}</td>
+                `;
+                tableBody.appendChild(row);
+            }
+        }
+
+        // Fetch data immediately when the page loads
+        fetchData();
+
+        // Fetch data every 5 seconds
+        setInterval(fetchData, 5000);
+    </script>
+</body>
+</html>

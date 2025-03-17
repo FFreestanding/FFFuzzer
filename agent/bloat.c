@@ -218,11 +218,11 @@ void bloatme(void){
     char path[100];
     sprintf(path, "cat /proc/%d/maps", getpid());
     printf("%s\n", path);
-    system(path);
+    int r = system(path);
     sprintf(path, "ls -ltrha /proc/%d/fd/", getpid());
     printf("%s\n", path);
-    system(path);
-    system("ps -aux");
+    r = system(path);
+    r = system("ps -aux");
     bloated = 1;
     sleep(1);
     fflush(stdout);

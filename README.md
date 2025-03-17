@@ -40,7 +40,7 @@ Now pick a fuzzing-config from `configs/` and start the fuzzer:
 
 ```bash
 # Fuzz KVM with 4 workers
-./scripts/fuzz.sh 4 configs/kvm.h
+./scripts/fuzz.sh 4 configs/bpf.h
 ```
 
 Or, to run a single worker with serial-output from the VM enabled:

@@ -16,7 +16,7 @@ if [ -z "$CORPUS_DIR" ]; then
 fi
 
 if [ -z "$kernel" ]; then
-    kernel=$PROJECT_ROOT/kernel-build/arch/x86/boot/bzImage
+    kernel=$PROJECT_ROOT/kernel/arch/x86/boot/bzImage
 fi
 
 if [ -z "$qemu" ]; then
@@ -28,20 +28,8 @@ image=$PROJECT_ROOT/images/bullseye.img
 kvm=$(egrep -c '(vmx|svm)' /proc/cpuinfo)
 
 if [ "$kvm" -eq 0 ]; then
-    export QEMU_SNAP_ARGS="-cpu qemu64, \
-        -machine q35,vmport=off,smbus=off,acpi=off,usb=off,graphics=off -m 1G \
-        -kernel $kernel \
-        -append 'root=/dev/vda earlyprintk=ttyS0 console=ttyS0 nokaslr silent notsc acpi=off' \
-        -drive file=$image,id=dr0,format=raw,if=none \
-        -virtfs local,path=$SHARE_DIR,mount_tag=host0,security_model=none,id=host0,readonly=on \
-        -device virtio-blk-pci,drive=dr0 \
-        -nographic -nodefaults -nographic  \
-        -drive file=null-co://,if=none,id=nvm  -vga virtio \
-        -device megasas,id=scsi0 \
-        -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
-        -drive file=null-co://,if=none,id=drive0 \
-        -device nvme,serial=deadbeef,drive=nvm \
-        -serial none -snapshot -cdrom /dev/null $EXTRA_ARGS"
+    echo "ERROR, Machine doesn't support KVM";
+    exit
 else
     export QEMU_SNAP_ARGS="-cpu host,kvm=on,svm=on \
         -machine q35,vmport=off,smbus=off,acpi=off,usb=off,graphics=off -m 1G \
@@ -70,7 +58,7 @@ fi
 
 echo $QEMU_SNAP_ARGS
 
-	$qemu $QEMU_SNAP_ARGS \
+	$qemu \
         -rss_limit_mb=8096 \
         -use_value_profile=1  \
         -detect_leaks=0 \

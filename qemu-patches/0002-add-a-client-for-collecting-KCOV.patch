@@ -1,0 +1,179 @@
+From 5e2ef5be65845eefd43e28058b96281f85fe06b1 Mon Sep 17 00:00:00 2001
+From: FFreestanding <yuxuanzhe@outlook.com>
+Date: Mon, 17 Mar 2025 20:52:51 +0800
+Subject: [PATCH 2/2] add a client for collecting KCOV
+
+---
+ hw/i386/fuzz.c | 106 ++++++++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 100 insertions(+), 6 deletions(-)
+
+diff --git a/hw/i386/fuzz.c b/hw/i386/fuzz.c
+index 566c961e20..1ddca28d66 100644
+--- a/hw/i386/fuzz.c
++++ b/hw/i386/fuzz.c
+@@ -36,6 +36,15 @@ int fuzz_log_syscalls;
+ int fuzz_notimeout;
+ int fuzz_print_all_pcs;
+ 
++static char work_dir[100];
++static int fuzz_id;
++
++static int sock;
++enum {
++    NEED_COV = 0x66
++};
++static uint8_t cmd;
++
+ static char *str0;
+ static char *str1;
+ 
+@@ -148,7 +157,7 @@ static void memslot_cb(KVMSlot *slot)
+     }
+ }
+ 
+-void x86_cpu_dump_state(CPUState *cs, FILE *f, int flags);
++// void x86_cpu_dump_state(CPUState *cs, FILE *f, int flags);
+ static void restore_vm(void)
+ {
+     int ret;
+@@ -264,7 +273,7 @@ static void snapport_write(void *opaque, hwaddr addr, uint64_t val,
+ {
+     static int init;
+     QEMUFile *f;
+-
++    
+     if (!init) {
+         init++;
+         ram = qemu_ram_get_host_addr(
+@@ -306,7 +315,7 @@ static void snapport_write(void *opaque, hwaddr addr, uint64_t val,
+                 perror("memfd_create");
+                 return;
+             }
+-            ftruncate(memfd, ramsize);
++            if(ftruncate(memfd, ramsize)){}
+         }
+ 
+         // Save the Memory
+@@ -406,6 +415,45 @@ static void snapport_write(void *opaque, hwaddr addr, uint64_t val,
+         restore_vm();
+         break;
+     }
++    
++    ssize_t bytes_read = read(sock, &cmd, 1);
++    if (bytes_read == -1) {
++        perror("read failed");
++        close(sock);
++        exit(1);
++    }
++    if (bytes_read == 0) {
++        printf("Server closed connection\n");
++        close(sock);
++        exit(0);
++    }
++    if (cmd == NEED_COV) {
++        cmd = 0;
++        printf("Client received NEED_COV command\n");
++        // 发送数据长度（8 字节）
++        uint64_t data_len = g_hash_table_size(seen_pcs) * sizeof(uint64_t);
++        if (write(sock, &data_len, sizeof(uint64_t)) != sizeof(uint64_t)) {
++            printf("write length failed\n");
++            close(sock);
++            exit(1);
++        }
++
++        // 初始化迭代器
++        GHashTableIter iter;
++        g_hash_table_iter_init(&iter, seen_pcs);
++        // 遍历哈希表
++        gpointer key, value;
++        while (g_hash_table_iter_next(&iter, &key, &value)) {
++            // 发送实际数据
++            if (write(sock, &key, sizeof(uint64_t)) != sizeof(uint64_t)) {
++                printf("write data failed\n");
++                close(sock);
++                exit(1);
++            }
++        }
++
++        printf("Client sent %lu bytes\n", data_len);
++    }
+ }
+ 
+ static uint64_t snapport_read(void *opaque, hwaddr addr, unsigned size)
+@@ -514,10 +562,10 @@ static void *work(void *pthread_param)
+ 
+     GString *cmd_line = g_string_new(TARGET_NAME);
+     g_string_append_printf(cmd_line, " %s", getenv("QEMU_SNAP_ARGS"));
+-    printf("cmd_line: %s\n", cmd_line->str);
++    // printf("cmd_line: %s\n", cmd_line->str);
+     wordexp(cmd_line->str, &result, 0);
+-    for (int i = 0; i < result.we_wordc; i++)
+-        printf("cmd_line[%d]: %s\n", i, result.we_wordv[i]);
++    // for (int i = 0; i < result.we_wordc; i++)
++    //     printf("cmd_line[%d]: %s\n", i, result.we_wordv[i]);
+     g_string_free(cmd_line, true);
+     qemu_init(result.we_wordc, result.we_wordv);
+     qemu_main_loop();
+@@ -549,6 +597,51 @@ int LLVMFuzzerInitialize(int *argc, char ***argv, char ***envp)
+     fuzz_notimeout = getenv("NOTIMEOUT") != NULL;
+     seen_pcs = g_hash_table_new(NULL, NULL);
+ 
++    char *fuzz_id_str = getenv("FUZZ_ID");
++    if (!fuzz_id_str) {
++        printf("Error: FUZZ_ID environment variable not set\n");
++        exit(-1);
++    }
++    printf("get FUZZ_ID environment variable\n");
++
++    fuzz_id = atoi(fuzz_id_str);
++
++    // 获取工作目录
++    char *work_dir_p = getenv("WORK_DIR");
++    if (!work_dir_p) {
++        printf("Error: WORK_DIR environment variable not set\n");
++        exit(-1);
++    }
++    printf("get WORK_DIR environment variable\n");
++    sprintf(work_dir, "%s", work_dir_p);
++
++    char *port = getenv("PORT");
++    if (!port) {
++        printf("Error: PORT environment variable not set\n");
++        exit(-1);
++    }
++    printf("get PORT environment variable\n");
++    
++    sock = socket(AF_INET, SOCK_STREAM, 0);
++    if (sock == -1) {
++        perror("socket failed");
++        exit(1);
++    }
++
++    // 连接到服务器
++    struct sockaddr_in server_addr;
++    memset(&server_addr, 0, sizeof(server_addr));
++    server_addr.sin_family = AF_INET;
++    server_addr.sin_port = htons(atoi(port));
++    inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
++
++    if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
++        perror("connect failed");
++        close(sock);
++        exit(1);
++    }
++    printf("connected to 127.0.0.1:%s\n", port);
++
+     sem_init(&wait_for_device, 0, 0);
+     sem_init(&wait_for_fuzzer, 0, 0);
+ 
+@@ -631,6 +724,7 @@ static void transpose_coverage(uint64_t **cmp, int index)
+                     [base % (PAGESIZE / sizeof(uint64_t))],
+                 __ATOMIC_RELAXED);
+             pc |= 0xFFFFFFFFLL << 32;
++            printf("try insert\n");
+             if (g_hash_table_insert(seen_pcs, (gpointer)pc,
+                                     (gpointer)1) ||
+                 fuzz_print_all_pcs) {
+-- 
+2.34.1
+
