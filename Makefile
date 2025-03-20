@@ -9,7 +9,7 @@ PROJECT_ROOT := $(dir $(MKFILE_PATH))
 all: image kernelbuild qemubuild libfuzzerng
 
 # .:: kernel + mod-ng ::.
-kernelbuild: kernel-build/.config mod-ng
+kernelbuild: kernel/.config mod-ng
 	cd $(PROJECT_ROOT)/kernel; \
 		make -j$(NPROC) CC=$(CC) \
 		KCFLAGS="-fsanitize-coverage-allowlist=$(PROJECT_ROOT)/kernel/whitelist"
@@ -18,17 +18,16 @@ mod-ng: kernel kernel/include/linux/fuzzer_dev.h
 
 kernel/include/linux/fuzzer_dev.h:
 ifeq (,$(wildcard kernel/include/linux/fuzzer_dev.h))
-	git apply -v  --directory=kernel/ kernel-patches/*.patch
+	git apply -v --directory=kernel/ kernel-patches/*.patch
 endif
 
-kernel-build/.config:
-	mkdir -p kernel-build
-	cp kernel-configs/general kernel-build/.config
+kernel/.config:
+	cp kernel-configs/general kernel/.config
 
 kernel:
 	# curl -s -L https://cdn.kernel.org/pub/linux/kernel/v6.x/$(KVERSION).tar.gz | tar -xz
 	curl -s -L https://mirrors.aliyun.com/linux-kernel/v6.x/linux-6.1.tar.gz | tar -xz
-	cp -r $(KVERSION) kernel
+	mv $(KVERSION) kernel
 
 # .:: qemu-ng ::.
 qemubuild: qemu/build/qemu-fuzz-x86_64
@@ -40,7 +39,7 @@ qemu-build:
 	mkdir -p qemu-build; cd qemu-build; \
 	LIB_FUZZING_ENGINE="$(PROJECT_ROOT)/libfuzzer-ng/libFuzzer.a" \
 	$(PROJECT_ROOT)/qemu/configure --enable-fuzzing --enable-virtfs;
-	//--enable-sanitizers
+	#--enable-sanitizers
 
 qemu/hw/i386/fuzz.c: qemu/
 ifeq (,$(wildcard qemu/hw/i386/fuzz.c))

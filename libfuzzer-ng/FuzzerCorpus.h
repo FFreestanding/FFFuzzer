@@ -473,18 +473,18 @@ public:
           SyscallCorpus[elt->id].insert(elt);
       }
       int i =0;
-      for (auto &sc: II->InputSyscalls) {
-          Printf("SC[%d] {id: %lx (%d in corpus), pos: %d - %d, time: %d, success: %lx, cfus: %d}\n",
-                  i++,
-                  sc->id,
-                  SyscallCorpus[sc->id].size(),
-                  sc->start,
-                  sc->start + sc->len,
-                  sc->runtime,
-                  sc->success == 1,
-                  sc->n_copy_from_user
-                );
-      }
+      //# for (auto &sc: II->InputSyscalls) {
+      //     Printf("SC[%d] {id: %lx (%d in corpus), pos: %d - %d, time: %d, success: %lx, cfus: %d}\n",
+      //             i++,
+      //             sc->id,
+      //             SyscallCorpus[sc->id].size(),
+      //             sc->start,
+      //             sc->start + sc->len,
+      //             sc->runtime,
+      //             sc->success == 1,
+      //             sc->n_copy_from_user
+      //           );
+      // }
       //std::set<Syscall> s(II->InputSyscalls.begin(), II->InputSyscalls.end());
       for (auto &sc: II->InputSyscalls) {
           if(SyscallSuccesses.find(sc->id) == SyscallSuccesses.end()){

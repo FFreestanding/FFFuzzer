@@ -328,21 +328,21 @@ int RunOneTest(Fuzzer *F, const char *InputFilePath, size_t MaxLen) {
   } else {
     F->TryDetectingAMemoryLeak(U.data(), U.size(), true);
   }
-  Printf("SyscalLLog: %lx\n", F->SyscallLog->len);
-  if (F->SyscallLog) {
-      for(int i = 0 ; i < F->SyscallLog->len; i++) {
-          Printf("SC[%d] {id: %lx, pos: %d - %d, time: %d, success: %lx, cfus: %d}\n",
-                  i,
-                  F->SyscallLog->data[i].id,
-                  F->SyscallLog->data[i].start,
-                  F->SyscallLog->data[i].start + F->SyscallLog->data[i].len,
-                  F->SyscallLog->data[i].runtime,
-                  F->SyscallLog->data[i].success == 1,
-                  F->SyscallLog->data[i].n_copy_from_user
-                );
-      }
-      Printf("\n");
-  }
+  //# Printf("SyscalLLog: %lx\n", F->SyscallLog->len);
+  // if (F->SyscallLog) {
+  //     for(int i = 0 ; i < F->SyscallLog->len; i++) {
+  //         Printf("SC[%d] {id: %lx, pos: %d - %d, time: %d, success: %lx, cfus: %d}\n",
+  //                 i,
+  //                 F->SyscallLog->data[i].id,
+  //                 F->SyscallLog->data[i].start,
+  //                 F->SyscallLog->data[i].start + F->SyscallLog->data[i].len,
+  //                 F->SyscallLog->data[i].runtime,
+  //                 F->SyscallLog->data[i].success == 1,
+  //                 F->SyscallLog->data[i].n_copy_from_user
+  //               );
+  //     }
+  //     Printf("\n");
+  // }
   return 0;
 }
 

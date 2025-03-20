@@ -1,4 +1,3 @@
-
 use nix::fcntl::{open, OFlag};
 use nix::sys::stat::Mode;
 use serde::{Deserialize, Serialize};
@@ -98,6 +97,7 @@ fn run_qemu(config: Config, i: usize, qemu_snap_args: String, port: usize) {
         .env("FUZZ_TRACE_PC", "1")
         .env("PRINT_ALL_PCS", "1")
         .env("MUTATE_SYSCALLS", "1")
+        .env("PRINT_CRASHES", "1")
         .stdout(Stdio::from(log_file.try_clone().expect("Failed to clone log file for stdout")))
         .stderr(Stdio::from(log_file.try_clone().expect("Failed to clone log file for stderr")))
         .spawn().expect(&format!("Spawned QEMU process {} error", i));
@@ -109,50 +109,52 @@ fn spawn_qemu_processes(config: Config) -> web::Data<Vec<Arc<Mutex<std::net::Tcp
     let qemu_snap_args;
     if check_kvm_support() {
         println!("KVM is supported");
+        // qemu_snap_args = format!("-cpu host,kvm=on,svm=on \
+        //     -machine q35,vmport=off,smbus=off,acpi=off,usb=off,graphics=off -m 1G \
+        //     -kernel {} \
+        //     -append 'root=/dev/vda earlyprintk=ttyS0 console=ttyS0 nokaslr silent notsc acpi=off \
+        //     kvm-intel.nested=1 kvm-intel.unrestricted_guest=1 kvm-intel.vmm_exclusive=1 kvm-intel.fasteoi=1 \
+        //     kvm-intel.ept=1 kvm-intel.flexpriority=1 kvm-intel.vpid=1 kvm-intel.emulate_invalid_guest_state=1 \
+        //     kvm-intel.eptad=1 kvm-intel.enable_shadow_vmcs=1 kvm-intel.pml=1 kvm-intel.enable_apicv=1' \
+        //     -drive file={},id=dr0,format=raw,if=none \
+        //     -virtfs local,path={},mount_tag=host0,security_model=none,id=host0,readonly=on \
+        //     -device virtio-blk-pci,drive=dr0 \
+        //     -nographic -accel kvm -nodefaults \
+        //     -drive file=null-co://,if=none,id=nvm  -vga virtio \
+        //     -device megasas,id=scsi0 \
+        //     -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
+        //     -drive file=null-co://,if=none,id=drive0 \
+        //     -device nvme,serial=deadbeef,drive=nvm \
+        //     -serial none -snapshot -cdrom /dev/null",
+        //     &config.bzimage_path,
+        //     &config.image_path,
+        //     &config.agent_dir);
         qemu_snap_args = format!("-cpu host,kvm=on,svm=on \
-            -machine q35,vmport=off,smbus=off,acpi=off,usb=off,graphics=off -m 1G \
-            -kernel {} \
-            -append 'root=/dev/vda earlyprintk=ttyS0 console=ttyS0 nokaslr silent notsc acpi=off \
-            kvm-intel.nested=1 kvm-intel.unrestricted_guest=1 kvm-intel.vmm_exclusive=1 kvm-intel.fasteoi=1 \
-            kvm-intel.ept=1 kvm-intel.flexpriority=1 kvm-intel.vpid=1 kvm-intel.emulate_invalid_guest_state=1 \
-            kvm-intel.eptad=1 kvm-intel.enable_shadow_vmcs=1 kvm-intel.pml=1 kvm-intel.enable_apicv=1' \
-            -drive file={},id=dr0,format=raw,if=none \
-            -virtfs local,path={},mount_tag=host0,security_model=none,id=host0,readonly=on \
-            -device virtio-blk-pci,drive=dr0 \
-            -nographic -nodefaults -nographic  \
-            -drive file=null-co://,if=none,id=nvm  -vga virtio \
-            -device megasas,id=scsi0 \
-            -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
-            -drive file=null-co://,if=none,id=drive0 \
-            -device nvme,serial=deadbeef,drive=nvm \
-            -serial none -snapshot -cdrom /dev/null",
-            &config.bzimage_path,
-            &config.image_path,
-            &config.agent_dir);
+        -machine q35,vmport=off,smbus=off,acpi=off,usb=off,graphics=off -m 1G \
+        -kernel {} \
+        -append 'root=/dev/vda earlyprintk=ttyS0 console=ttyS0 nokaslr silent notsc acpi=off \
+        kvm-amd.nested=1 kvm-amd.npt=1 kvm-amd.avic=1 kvm-amd.vls=1 kvm-amd.sev=0' \
+        -drive file={},id=dr0,format=raw,if=none \
+        -virtfs local,path={},mount_tag=host0,security_model=none,id=host0,readonly=on \
+        -device virtio-blk-pci,drive=dr0 \
+        -nographic -accel kvm -nodefaults \
+        -drive file=null-co://,if=none,id=nvm  -vga virtio \
+        -device megasas,id=scsi0 \
+        -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
+        -drive file=null-co://,if=none,id=drive0 \
+        -device nvme,serial=deadbeef,drive=nvm \
+        -serial none -snapshot -cdrom /dev/null",
+        &config.bzimage_path,
+        &config.image_path,
+        &config.agent_dir);
+        println!("{}", qemu_snap_args);
     } else {
-        println!("KVM is not supported");
-        qemu_snap_args = format!(" -m 1G -kernel {} \
-            -append 'root=/dev/vda earlyprintk=ttyS0 console=ttyS0 nokaslr silent notsc acpi=off' \
-            -drive file={},id=dr0,format=raw,if=none \
-            -virtfs local,path={},mount_tag=host0,security_model=none,id=host0,readonly=on \
-            -device virtio-blk-pci,drive=dr0 \
-            -nographic -nodefaults -nographic  \
-            -drive file=null-co://,if=none,id=nvm  -vga virtio \
-            -device megasas,id=scsi0 \
-            -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
-            -drive file=null-co://,if=none,id=drive0 \
-            -device nvme,serial=deadbeef,drive=nvm \
-            -serial none -snapshot -cdrom /dev/null",
-            &config.bzimage_path,
-            &config.image_path,
-            &config.agent_dir);
+        panic!("KVM is not supported");
     }
-
 
     let mut clients = Vec::new();
     for i in 0..config.procs {
         let listener = TcpListener::bind(format!("127.0.0.1:{}", SOCKET_PORT_BASE+i)).expect("TcpListener::bind error\n");
-        
         println!("Controller listening on 127.0.0.1:{}", SOCKET_PORT_BASE+i);
         run_qemu(config.clone(), i, qemu_snap_args.clone(), SOCKET_PORT_BASE+i);
         let (stream, _) = listener.accept().expect("listener accept error\n");
@@ -163,27 +165,46 @@ fn spawn_qemu_processes(config: Config) -> web::Data<Vec<Arc<Mutex<std::net::Tcp
 
 async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> impl Responder {
     println!("coverage_handler");
-    // let config = CONFIG_INFO.get().unwrap();
-    // let pcs = PCS.lock().unwrap();
     for client in clients.iter() {
         let mut stream = client.lock().unwrap();
-        stream.write_all(&[CMD::NeedCov as u8]).unwrap();
+        if let Err(e) = stream.write_all(&[CMD::NeedCov as u8]) {
+            println!("Write failed: {}", e);
+            continue;
+        }
         stream.flush().unwrap();
     }
+
     for client in clients.iter() {
         let mut stream = client.lock().unwrap();
-        // 读取 8 字节长度
         let mut len_buf = [0; 8];
-        stream.read_exact(&mut len_buf).unwrap();
-        let data_len = usize::from_ne_bytes(len_buf);
+        if let Err(e) = stream.read_exact(&mut len_buf) {
+            println!("Read length failed: {}", e);
+            continue;
+        }
+        let data_len = usize::from_le_bytes(len_buf); // Match QEMU's little-endian
         println!("Receiving data ({} bytes)", data_len);
-        // 读取实际数据
+
+        if data_len % 8 != 0 {
+            println!("Invalid data length: {}", data_len);
+            continue;
+        }
+
         let mut data = vec![0u8; data_len];
-        stream.read_exact(&mut data).unwrap();
-        
+        if let Err(e) = stream.read_exact(&mut data) {
+            println!("Read data failed: {}", e);
+            continue;
+        }
         println!("Received data ({} bytes)", data_len);
+
+        let mut pcs = PCS.lock().unwrap();
+        for chunk in data.chunks_exact(8) {
+            let pc = u64::from_le_bytes(chunk.try_into().unwrap());
+            pcs.insert(pc);
+        }
     }
-    HttpResponse::Ok().body(format!("cov: {}", PCS.lock().iter().count()))
+
+    let pcs_count = PCS.lock().unwrap().len();
+    HttpResponse::Ok().body(format!("cov: {}", pcs_count))
 }
 
 async fn index() -> impl Responder {
