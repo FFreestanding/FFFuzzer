@@ -1,0 +1,164 @@
+From 8c48991ebbe5a124296b6f7f250013fd0dc90392 Mon Sep 17 00:00:00 2001
+From: FFreestanding <yuxuanzhe@outlook.com>
+Date: Thu, 20 Mar 2025 21:46:56 +0800
+Subject: [PATCH 3/3] add support for collect coverage
+
+---
+ hw/i386/fuzz.c | 94 +++++++++++++++++++++++++++-----------------------
+ 1 file changed, 50 insertions(+), 44 deletions(-)
+
+diff --git a/hw/i386/fuzz.c b/hw/i386/fuzz.c
+index 1ddca28d66..f5077932b5 100644
+--- a/hw/i386/fuzz.c
++++ b/hw/i386/fuzz.c
+@@ -268,12 +268,24 @@ static void sample_handler(void *opaque)
+                  qemu_clock_get_ns(QEMU_CLOCK_HOST) + SAMPLE_RATE);
+ }
+ 
++static void send_seen_pcs(gpointer key, gpointer value, gpointer user_data) {
++    uint64_t pc = (uint64_t)key;           // Cast key back to uint64_t
++    // uintptr_t val = (uintptr_t)value;          // Cast value back to integer
++    // 发送实际数据
++    if (send(sock, &pc, sizeof(uint64_t), 0) != sizeof(uint64_t)) {
++        printf("write data failed\n");
++        // close(sock);
++        // exit(1);
++    }
++    // printf("PC: 0x%" PRIx64 ", Value: %lu\n", pc_key, val);
++}
++
+ static void snapport_write(void *opaque, hwaddr addr, uint64_t val,
+                            unsigned size)
+ {
+     static int init;
+     QEMUFile *f;
+-    
++    // printf("snapport_write\n");
+     if (!init) {
+         init++;
+         ram = qemu_ram_get_host_addr(
+@@ -416,44 +428,36 @@ static void snapport_write(void *opaque, hwaddr addr, uint64_t val,
+         break;
+     }
+     
+-    ssize_t bytes_read = read(sock, &cmd, 1);
++    ssize_t bytes_read = recv(sock, &cmd, 1, 0);
+     if (bytes_read == -1) {
+-        perror("read failed");
+-        close(sock);
+-        exit(1);
+-    }
+-    if (bytes_read == 0) {
+-        printf("Server closed connection\n");
+-        close(sock);
+-        exit(0);
+-    }
+-    if (cmd == NEED_COV) {
+-        cmd = 0;
+-        printf("Client received NEED_COV command\n");
+-        // 发送数据长度（8 字节）
+-        uint64_t data_len = g_hash_table_size(seen_pcs) * sizeof(uint64_t);
+-        if (write(sock, &data_len, sizeof(uint64_t)) != sizeof(uint64_t)) {
+-            printf("write length failed\n");
+-            close(sock);
+-            exit(1);
+-        }
+-
+-        // 初始化迭代器
+-        GHashTableIter iter;
+-        g_hash_table_iter_init(&iter, seen_pcs);
+-        // 遍历哈希表
+-        gpointer key, value;
+-        while (g_hash_table_iter_next(&iter, &key, &value)) {
+-            // 发送实际数据
+-            if (write(sock, &key, sizeof(uint64_t)) != sizeof(uint64_t)) {
+-                printf("write data failed\n");
+-                close(sock);
+-                exit(1);
++        // printf("recv failed\n");
++        // close(sock);
++        // exit(1);
++    } else if (bytes_read > 0) {
++        printf("recv %zd bytes\n", bytes_read);
++        if (cmd == NEED_COV) {
++            cmd = 0;
++            printf("Client received NEED_COV command\n");
++            // 发送数据长度（8 字节）
++            uint64_t data_len = g_hash_table_size(seen_pcs) * sizeof(uint64_t);
++            printf("data length: %lu\n", data_len);
++            if (send(sock, &data_len, sizeof(uint64_t), 0) != sizeof(uint64_t)) {
++                printf("write length failed\n");
++                // close(sock);
++                // exit(1);
+             }
++            if (data_len) {
++                g_hash_table_foreach(seen_pcs, send_seen_pcs, NULL);
++            }
++            // printf("Client sent %lu bytes\n", data_len);
+         }
+-
+-        printf("Client sent %lu bytes\n", data_len);
+     }
++    // if (bytes_read == 0) {
++    //     printf("Server closed connection\n");
++    //     // close(sock);
++    //     // exit(0);
++    // }
++    
+ }
+ 
+ static uint64_t snapport_read(void *opaque, hwaddr addr, unsigned size)
+@@ -621,10 +625,10 @@ int LLVMFuzzerInitialize(int *argc, char ***argv, char ***envp)
+         exit(-1);
+     }
+     printf("get PORT environment variable\n");
+-    
++
+     sock = socket(AF_INET, SOCK_STREAM, 0);
+     if (sock == -1) {
+-        perror("socket failed");
++        printf("socket failed\n");
+         exit(1);
+     }
+ 
+@@ -636,12 +640,15 @@ int LLVMFuzzerInitialize(int *argc, char ***argv, char ***envp)
+     inet_pton(AF_INET, "127.0.0.1", &server_addr.sin_addr);
+ 
+     if (connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
+-        perror("connect failed");
++        printf("connect failed");
+         close(sock);
+         exit(1);
+     }
+     printf("connected to 127.0.0.1:%s\n", port);
+ 
++    int flags = fcntl(sock, F_GETFL, 0);
++    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
++
+     sem_init(&wait_for_device, 0, 0);
+     sem_init(&wait_for_fuzzer, 0, 0);
+ 
+@@ -724,15 +731,14 @@ static void transpose_coverage(uint64_t **cmp, int index)
+                     [base % (PAGESIZE / sizeof(uint64_t))],
+                 __ATOMIC_RELAXED);
+             pc |= 0xFFFFFFFFLL << 32;
+-            printf("try insert\n");
+             if (g_hash_table_insert(seen_pcs, (gpointer)pc,
+                                     (gpointer)1) ||
+                 fuzz_print_all_pcs) {
+-                if (cmp == remote_cmp_arrays) {
+-                    printf("[%ld] NEW_PC_REMOTE: %lx\n", time(NULL),
+-                           pc - 5);
+-                } else
+-                    printf("[%ld] NEW_PC: %lx\n", time(NULL), pc - 5);
++                // if (cmp == remote_cmp_arrays) {
++                //     printf("[%ld] NEW_PC_REMOTE: %lx\n", time(NULL),
++                //            pc - 5);
++                // } else
++                //     printf("[%ld] NEW_PC: %lx\n", time(NULL), pc - 5);
+             }
+             if (!ignore_cov)
+                 libfuzzer_coverage[pc % sizeof(libfuzzer_coverage)]++;
+-- 
+2.45.2
+

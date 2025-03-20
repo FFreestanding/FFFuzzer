@@ -1,7 +1,7 @@
-From 5e2ef5be65845eefd43e28058b96281f85fe06b1 Mon Sep 17 00:00:00 2001
+From 0b64a08448ac48600caefd344f1804e6944cdcea Mon Sep 17 00:00:00 2001
 From: FFreestanding <yuxuanzhe@outlook.com>
 Date: Mon, 17 Mar 2025 20:52:51 +0800
-Subject: [PATCH 2/2] add a client for collecting KCOV
+Subject: [PATCH 2/3] add a client for collecting KCOV
 
 ---
  hw/i386/fuzz.c | 106 ++++++++++++++++++++++++++++++++++++++++++++++---
@@ -175,5 +175,5 @@ index 566c961e20..1ddca28d66 100644
                                      (gpointer)1) ||
                  fuzz_print_all_pcs) {
 -- 
-2.34.1
+2.45.2
 
