@@ -9,12 +9,12 @@ PROJECT_ROOT := $(dir $(MKFILE_PATH))
 all: image kernelbuild qemubuild libfuzzerng
 
 # .:: kernel + mod-ng ::.
-kernelbuild: kernel/.config mod-ng
+kernelbuild: kernel kernel/.config mod-ng
 	cd $(PROJECT_ROOT)/kernel; \
 		make -j$(NPROC) CC=$(CC) \
 		KCFLAGS="-fsanitize-coverage-allowlist=$(PROJECT_ROOT)/kernel/whitelist"
 
-mod-ng: kernel kernel/include/linux/fuzzer_dev.h
+mod-ng: kernel/include/linux/fuzzer_dev.h
 
 kernel/include/linux/fuzzer_dev.h:
 ifeq (,$(wildcard kernel/include/linux/fuzzer_dev.h))
