@@ -1,0 +1,652 @@
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot 存在：bzImage
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot/compressed 存在：mkpiggy
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot/compressed 存在：piggy.S
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot/compressed 存在：vmlinux.bin.gz
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot/compressed 存在：vmlinux.lds
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot/compressed 存在：vmlinux.relocs
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot 存在：cpustr.h
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot 存在：mkcpustr
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot 存在：setup.elf
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot/tools 存在：build
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot 存在：voffset.h
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/boot 存在：zoffset.h
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/arch/x86/entry/common.c ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/common.c
+--- ./linux-6.13.8/arch/x86/entry/common.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/common.c	2025-03-24 19:39:34.959504235 +0800
+@@ -75,6 +75,8 @@
+ /* Returns true to return using SYSRET, or false to use IRET */
+ __visible noinstr bool do_syscall_64(struct pt_regs *regs, int nr)
+ {
++	int fe = current->fuzz_enabled;
++	current->fuzz_enabled = 0; //# 防止系统调用本身的 copy_from_user 触发钩子。
+ 	add_random_kstack_offset();
+ 	nr = syscall_enter_from_user_mode(regs, nr);
+ 
+@@ -87,6 +89,7 @@
+ 
+ 	instrumentation_end();
+ 	syscall_exit_to_user_mode(regs);
++	current->fuzz_enabled = fe;
+ 
+ 	/*
+ 	 * Check that the register state is valid for using SYSRET to exit
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/vdso 存在：vdso2c
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/vdso/vdso32 存在：vdso32.lds
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/vdso 存在：vdso32.so
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/vdso 存在：vdso32.so.dbg
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/vdso 存在：vdso64.so
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/vdso 存在：vdso64.so.dbg
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/vdso 存在：vdso-image-32.c
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/vdso 存在：vdso-image-64.c
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/entry/vdso 存在：vdso.lds
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/arch/x86/include/asm/uaccess.h ../project/FFFuzzer/linux-6.13.8/arch/x86/include/asm/uaccess.h
+--- ./linux-6.13.8/arch/x86/include/asm/uaccess.h	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/arch/x86/include/asm/uaccess.h	2025-03-24 19:40:37.587330644 +0800
+@@ -10,6 +10,7 @@
+ #include <linux/mm_types.h>
+ #include <linux/string.h>
+ #include <linux/mmap_lock.h>
++#include <linux/fuzzer_dev.h>
+ #include <asm/asm.h>
+ #include <asm/page.h>
+ #include <asm/smap.h>
+@@ -77,6 +78,7 @@
+ ({									\
+ 	int __ret_gu;							\
+ 	register __inttype(*(ptr)) __val_gu asm("%"_ASM_DX);		\
++	fuzz_copy_from_user_cb((size_t)ptr, sizeof(*(ptr)), 0);\
+ 	__chk_user_ptr(ptr);						\
+ 	asm volatile("call __" #fn "_%c[size]"				\
+ 		     : "=a" (__ret_gu), "=r" (__val_gu),		\
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/include 存在：generated
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/kernel 存在：asm-offsets.s
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/kernel/cpu 存在：capflags.c
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/arch/x86/kernel/dumpstack.c ../project/FFFuzzer/linux-6.13.8/arch/x86/kernel/dumpstack.c
+--- ./linux-6.13.8/arch/x86/kernel/dumpstack.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/arch/x86/kernel/dumpstack.c	2025-03-24 19:41:04.579261462 +0800
+@@ -18,6 +18,7 @@
+ #include <linux/nmi.h>
+ #include <linux/sysfs.h>
+ #include <linux/kasan.h>
++#include <linux/fuzzer_dev.h>
+ 
+ #include <asm/cpu_entry_area.h>
+ #include <asm/stacktrace.h>
+@@ -192,6 +193,7 @@
+ 	int graph_idx = 0;
+ 	bool partial = false;
+ 
++	fuzz_track_show_trace();
+ 	printk("%sCall Trace:\n", log_lvl);
+ 
+ 	unwind_start(&state, task, regs, stack);
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/arch/x86/kernel/traps.c ../project/FFFuzzer/linux-6.13.8/arch/x86/kernel/traps.c
+--- ./linux-6.13.8/arch/x86/kernel/traps.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/arch/x86/kernel/traps.c	2025-03-24 19:41:49.707152737 +0800
+@@ -43,6 +43,7 @@
+ #include <linux/atomic.h>
+ #include <linux/iommu.h>
+ #include <linux/ubsan.h>
++#include <linux/fuzzer_dev.h>
+ 
+ #include <asm/stacktrace.h>
+ #include <asm/processor.h>
+@@ -737,6 +738,7 @@
+ 			 (hint == GP_NON_CANONICAL) ? "probably for non-canonical address"
+ 						    : "maybe for address",
+ 			 gp_addr);
++	fuzz_track_show_trace();
+ 
+ 	/*
+ 	 * KASAN is interested only in the non-canonical case, clear it
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/kernel 存在：vmlinux.lds
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/lib 存在：inat-tables.c
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/realmode/rm 存在：pasyms.h
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/realmode/rm 存在：realmode.elf
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/realmode/rm 存在：realmode.lds
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/realmode/rm 存在：realmode.relocs
+只在 ../project/FFFuzzer/linux-6.13.8/arch/x86/tools 存在：relocs
+只在 ../project/FFFuzzer/linux-6.13.8/arch 存在：x86_64
+只在 ../project/FFFuzzer/linux-6.13.8/certs 存在：extract-cert
+只在 ../project/FFFuzzer/linux-6.13.8/certs 存在：signing_key.x509
+只在 ../project/FFFuzzer/linux-6.13.8/certs 存在：x509_certificate_list
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.checked-atomic-arch-fallback.h
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.checked-atomic-instrumented.h
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.checked-atomic-long.h
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.config.old
+只在 ../project/FFFuzzer/linux-6.13.8/crypto/asymmetric_keys 存在：pkcs7.asn1.c
+只在 ../project/FFFuzzer/linux-6.13.8/crypto/asymmetric_keys 存在：pkcs7.asn1.h
+只在 ../project/FFFuzzer/linux-6.13.8/crypto/asymmetric_keys 存在：x509_akid.asn1.c
+只在 ../project/FFFuzzer/linux-6.13.8/crypto/asymmetric_keys 存在：x509_akid.asn1.h
+只在 ../project/FFFuzzer/linux-6.13.8/crypto/asymmetric_keys 存在：x509.asn1.c
+只在 ../project/FFFuzzer/linux-6.13.8/crypto/asymmetric_keys 存在：x509.asn1.h
+只在 ../project/FFFuzzer/linux-6.13.8/crypto 存在：rsaprivkey.asn1.c
+只在 ../project/FFFuzzer/linux-6.13.8/crypto 存在：rsaprivkey.asn1.h
+只在 ../project/FFFuzzer/linux-6.13.8/crypto 存在：rsapubkey.asn1.c
+只在 ../project/FFFuzzer/linux-6.13.8/crypto 存在：rsapubkey.asn1.h
+只在 ../project/FFFuzzer/linux-6.13.8/drivers/scsi 存在：scsi_devinfo_tbl.c
+只在 ../project/FFFuzzer/linux-6.13.8/drivers/thermal/intel 存在：x86_pkg_temp_thermal.mod
+只在 ../project/FFFuzzer/linux-6.13.8/drivers/thermal/intel 存在：x86_pkg_temp_thermal.mod.c
+只在 ../project/FFFuzzer/linux-6.13.8/drivers/tty/vt 存在：conmakehash
+只在 ../project/FFFuzzer/linux-6.13.8/drivers/tty/vt 存在：consolemap_deftbl.c
+只在 ../project/FFFuzzer/linux-6.13.8/drivers/tty/vt 存在：defkeymap.c
+只在 ../project/FFFuzzer/linux-6.13.8/fs/efivarfs 存在：efivarfs.mod
+只在 ../project/FFFuzzer/linux-6.13.8/fs/efivarfs 存在：efivarfs.mod.c
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/fs/file.c ../project/FFFuzzer/linux-6.13.8/fs/file.c
+--- ./linux-6.13.8/fs/file.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/fs/file.c	2025-03-24 19:43:15.870966937 +0800
+@@ -312,6 +312,7 @@
+ 
+ static inline void __set_open_fd(unsigned int fd, struct fdtable *fdt, bool set)
+ {
++	fuzz_open_fd_cb(fd);
+ 	__set_bit(fd, fdt->open_fds);
+ 	__set_close_on_exec(fd, fdt, set);
+ 	fd /= BITS_PER_LONG;
+@@ -1055,6 +1056,7 @@
+ 
+ static inline struct file *__fget(unsigned int fd, fmode_t mask)
+ {
++	fuzz_fget_cb(fd);
+ 	return __fget_files(current->files, fd, mask);
+ }
+ 
+@@ -1133,6 +1135,7 @@
+ {
+ 	struct files_struct *files = current->files;
+ 	struct file *file;
++	fuzz_fget_cb(fd);
+ 
+ 	/*
+ 	 * If another thread is concurrently calling close_fd() followed
+@@ -1341,7 +1344,7 @@
+ 	return new_fd;
+ }
+ 
+-static int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
++int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
+ {
+ 	int err = -EBADF;
+ 	struct file *file;
+只在 ../project/FFFuzzer/linux-6.13.8/fs/smb/client 存在：cifs_spnego_negtokeninit.asn1.c
+只在 ../project/FFFuzzer/linux-6.13.8/fs/smb/client 存在：cifs_spnego_negtokeninit.asn1.h
+只在 ../project/FFFuzzer/linux-6.13.8/fs/smb/server 存在：ksmbd_spnego_negtokeninit.asn1.c
+只在 ../project/FFFuzzer/linux-6.13.8/fs/smb/server 存在：ksmbd_spnego_negtokeninit.asn1.h
+只在 ../project/FFFuzzer/linux-6.13.8/fs/smb/server 存在：ksmbd_spnego_negtokentarg.asn1.c
+只在 ../project/FFFuzzer/linux-6.13.8/fs/smb/server 存在：ksmbd_spnego_negtokentarg.asn1.h
+只在 ../project/FFFuzzer/linux-6.13.8/include 存在：config
+只在 ../project/FFFuzzer/linux-6.13.8/include 存在：generated
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/include/linux/fs.h ../project/FFFuzzer/linux-6.13.8/include/linux/fs.h
+--- ./linux-6.13.8/include/linux/fs.h	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/include/linux/fs.h	2025-03-24 20:56:49.125431322 +0800
+@@ -749,6 +749,8 @@
+ 	void			*i_private; /* fs or device private pointer */
+ } __randomize_layout;
+ 
++int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags);
++
+ /*
+  * Get bit address from inode->i_state to use with wait_var_event()
+  * infrastructre.
+只在 ../project/FFFuzzer/linux-6.13.8/include/linux 存在：fuzzer_dev.h
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/include/linux/instrumented.h ../project/FFFuzzer/linux-6.13.8/include/linux/instrumented.h
+--- ./linux-6.13.8/include/linux/instrumented.h	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/include/linux/instrumented.h	2025-03-24 20:20:26.869518479 +0800
+@@ -12,6 +12,7 @@
+ #include <linux/kcsan-checks.h>
+ #include <linux/kmsan-checks.h>
+ #include <linux/types.h>
++#include <linux/fuzzer_dev.h>
+ 
+ /**
+  * instrument_read - instrument regular read access
+@@ -109,6 +110,7 @@
+ static __always_inline void
+ instrument_copy_to_user(void __user *to, const void *from, unsigned long n)
+ {
++	fuzz_copy_from_user_cb((size_t)to, n, true);
+ 	kasan_check_read(from, n);
+ 	kcsan_check_read(from, n);
+ 	kmsan_copy_to_user(to, from, n, 0);
+@@ -126,6 +128,7 @@
+ static __always_inline void
+ instrument_copy_from_user_before(const void *to, const void __user *from, unsigned long n)
+ {
++	fuzz_copy_from_user_cb((size_t)from, n, false);
+ 	kasan_check_write(to, n);
+ 	kcsan_check_write(to, n);
+ }
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/include/linux/mm_types.h ../project/FFFuzzer/linux-6.13.8/include/linux/mm_types.h
+--- ./linux-6.13.8/include/linux/mm_types.h	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/include/linux/mm_types.h	2025-03-24 20:43:05.697148427 +0800
+@@ -702,7 +702,7 @@
+ 	 * To modify use vm_flags_{init|reset|set|clear|mod} functions.
+ 	 */
+ 	union {
+-		const vm_flags_t vm_flags;
++		vm_flags_t vm_flags;
+ 		vm_flags_t __private __vm_flags;
+ 	};
+ 
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/include/linux/sched.h ../project/FFFuzzer/linux-6.13.8/include/linux/sched.h
+--- ./linux-6.13.8/include/linux/sched.h	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/include/linux/sched.h	2025-03-24 19:45:48.294696633 +0800
+@@ -1493,7 +1493,8 @@
+ 	/* Collect coverage from softirq context: */
+ 	unsigned int			kcov_softirq;
+ #endif
+-
++	int fuzz_enabled;//# 给task_struct添加，管理每一个线程
++	void* fuzz_dev;
+ #ifdef CONFIG_MEMCG_V1
+ 	struct mem_cgroup		*memcg_in_oom;
+ #endif
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/include/linux/uaccess.h ../project/FFFuzzer/linux-6.13.8/include/linux/uaccess.h
+--- ./linux-6.13.8/include/linux/uaccess.h	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/include/linux/uaccess.h	2025-03-24 20:22:36.437485378 +0800
+@@ -107,6 +107,9 @@
+ 	instrument_copy_from_user_before(to, from, n);
+ 	if (should_fail_usercopy())
+ 		return n;
++	if(fuzz_copy_from_user_cb((size_t)from, n, 1)){
++		return 0;
++	}
+ 	check_object_size(to, n, false);
+ 	res = raw_copy_from_user(to, from, n);
+ 	instrument_copy_from_user_after(to, from, n, res);
+@@ -131,6 +134,9 @@
+ {
+ 	if (should_fail_usercopy())
+ 		return n;
++	if(fuzz_copy_from_user_cb((size_t)to, n, 1)){
++		return 0;
++	}//# 修改__copy_to_user和_copy_from_user
+ 	instrument_copy_to_user(to, from, n);
+ 	check_object_size(from, n, true);
+ 	return raw_copy_to_user(to, from, n);
+@@ -142,6 +148,9 @@
+ 	might_fault();
+ 	if (should_fail_usercopy())
+ 		return n;
++	if(fuzz_copy_from_user_cb((size_t)to, n, 1)){
++		return 0;
++	}
+ 	instrument_copy_to_user(to, from, n);
+ 	check_object_size(from, n, true);
+ 	return raw_copy_to_user(to, from, n);
+@@ -162,6 +171,9 @@
+ 	might_fault();
+ 	if (should_fail_usercopy())
+ 		goto fail;
++	if(fuzz_copy_from_user_cb((size_t)to, n, 1)){
++		return 0;
++	}
+ 	if (can_do_masked_user_access())
+ 		from = mask_user_address(from);
+ 	else {
+@@ -192,7 +204,11 @@
+ 	might_fault();
+ 	if (should_fail_usercopy())
+ 		return n;
++
+ 	if (access_ok(to, n)) {
++		if(fuzz_copy_from_user_cb((size_t)to, n, 1)){
++			return 0;
++		}
+ 		instrument_copy_to_user(to, from, n);
+ 		n = raw_copy_to_user(to, from, n);
+ 	}
+只在 ../project/FFFuzzer/linux-6.13.8/init 存在：utsversion-tmp.h
+只在 ../project/FFFuzzer/linux-6.13.8/kernel 存在：bounds.s
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/kernel/exit.c ../project/FFFuzzer/linux-6.13.8/kernel/exit.c
+--- ./linux-6.13.8/kernel/exit.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/kernel/exit.c	2025-03-24 19:52:57.890200673 +0800
+@@ -873,6 +873,7 @@
+ 	spin_unlock_irq(&sighand->siglock);
+ }
+ 
++void fuzz_exit_cb(void);
+ void __noreturn do_exit(long code)
+ {
+ 	struct task_struct *tsk = current;
+@@ -880,6 +881,7 @@
+ 
+ 	WARN_ON(irqs_disabled());
+ 
++	fuzz_exit_cb();
+ 	synchronize_group_exit(tsk, code);
+ 
+ 	WARN_ON(tsk->plug);
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/kernel/fork.c ../project/FFFuzzer/linux-6.13.8/kernel/fork.c
+--- ./linux-6.13.8/kernel/fork.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/kernel/fork.c	2025-03-24 19:54:05.522145917 +0800
+@@ -98,6 +98,7 @@
+ #include <linux/scs.h>
+ #include <linux/io_uring.h>
+ #include <linux/bpf.h>
++#include <linux/fuzzer_dev.h>
+ #include <linux/stackprotector.h>
+ #include <linux/user_events.h>
+ #include <linux/iommu.h>
+@@ -119,6 +120,8 @@
+ 
+ #include <kunit/visibility.h>
+ 
++void fuzz_task_init(struct task_struct *t);
++
+ /*
+  * Minimum number of threads to boot the kernel
+  */
+@@ -1175,6 +1178,7 @@
+ 	tsk->wake_q.next = NULL;
+ 	tsk->worker_private = NULL;
+ 
++	fuzz_task_init(tsk);
+ 	kcov_task_init(tsk);
+ 	kmsan_task_create(tsk);
+ 	kmap_local_fork(tsk);
+只在 ../project/FFFuzzer/linux-6.13.8/kernel 存在：fuzzer_dev.c
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/kernel/kcov.c ../project/FFFuzzer/linux-6.13.8/kernel/kcov.c
+--- ./linux-6.13.8/kernel/kcov.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/kernel/kcov.c	2025-03-24 20:03:15.969820755 +0800
+@@ -2,6 +2,7 @@
+ #define pr_fmt(fmt) "kcov: " fmt
+ 
+ #define DISABLE_BRANCH_PROFILING
++#include <linux/fuzzer_dev.h>
+ #include <linux/atomic.h>
+ #include <linux/compiler.h>
+ #include <linux/errno.h>
+@@ -26,6 +27,7 @@
+ #include <linux/refcount.h>
+ #include <linux/log2.h>
+ #include <asm/setup.h>
++#include <asm/io.h>
+ 
+ #define kcov_debug(fmt, ...) pr_debug("%s: " fmt, __func__, ##__VA_ARGS__)
+ 
+@@ -202,6 +204,7 @@
+ 	return ip;
+ }
+ 
++extern uint64_t last_kcov_write;
+ /*
+  * Entry point from instrumented code.
+  * This is called once per basic-block/edge.
+@@ -323,6 +326,13 @@
+ }
+ EXPORT_SYMBOL(__sanitizer_cov_trace_const_cmp8);
+ 
++void __sanitizer_cov_trace_gep(uintptr_t Idx)
++{
++	write_comp_data(KCOV_CMP_SIZE(3), Idx, 0,
++			_RET_IP_);
++}
++EXPORT_SYMBOL(__sanitizer_cov_trace_gep);
++
+ void notrace __sanitizer_cov_trace_switch(kcov_u64 val, void *arg)
+ {
+ 	u64 i;
+@@ -509,6 +519,7 @@
+ 			return res;
+ 		}
+ 	}
++	fuzz_set_kcov_vma(vma->vm_start, size, kcov->area, vma);
+ 	return 0;
+ exit:
+ 	spin_unlock_irqrestore(&kcov->lock, flags);
+@@ -532,6 +543,10 @@
+ 
+ static int kcov_close(struct inode *inode, struct file *filep)
+ {
++	if(current->fuzz_dev) {
++		outl(1, FUZZ_BASE + FUZZ_DEVICE_RESET);
++		dump_stack();
++	}
+ 	kcov_put(filep->private_data);
+ 	return 0;
+ }
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/kernel/Makefile ../project/FFFuzzer/linux-6.13.8/kernel/Makefile
+--- ./linux-6.13.8/kernel/Makefile	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/kernel/Makefile	2025-03-24 20:03:50.729804935 +0800
+@@ -117,6 +117,8 @@
+ obj-$(CONFIG_HAVE_STATIC_CALL_INLINE) += static_call_inline.o
+ obj-$(CONFIG_CFI_CLANG) += cfi.o
+ 
++obj-y += fuzzer_dev.o
++
+ obj-$(CONFIG_PERF_EVENTS) += events/
+ 
+ obj-$(CONFIG_USER_RETURN_NOTIFIER) += user-return-notifier.o
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/kernel/signal.c ../project/FFFuzzer/linux-6.13.8/kernel/signal.c
+--- ./linux-6.13.8/kernel/signal.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/kernel/signal.c	2025-03-24 20:04:45.309780813 +0800
+@@ -1185,6 +1185,10 @@
+ 	/* Should SIGKILL or SIGSTOP be received by a pid namespace init? */
+ 	bool force = false;
+ 
++	if (current->fuzz_dev) {
++		fuzz_signal_cb(sig);
++	}
++
+ 	if (info == SEND_SIG_NOINFO) {
+ 		/* Force if sent from an ancestor pid namespace */
+ 		force = !task_pid_nr_ns(current, task_active_pid_ns(t));
+只在 ../project/FFFuzzer/linux-6.13.8/lib 存在：crc32table.h
+只在 ../project/FFFuzzer/linux-6.13.8/lib 存在：gen_crc32table
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/lib/iov_iter.c ../project/FFFuzzer/linux-6.13.8/lib/iov_iter.c
+--- ./linux-6.13.8/lib/iov_iter.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/lib/iov_iter.c	2025-03-24 20:09:21.689669391 +0800
+@@ -20,6 +20,8 @@
+ 	if (should_fail_usercopy())
+ 		return len;
+ 	if (access_ok(iter_to, len)) {
++		if(fuzz_copy_from_user_cb((size_t)iter_to, len, 1))
++            return 0;
+ 		from += progress;
+ 		instrument_copy_to_user(iter_to, from, len);
+ 		len = raw_copy_to_user(iter_to, from, len);
+@@ -35,7 +37,8 @@
+ 
+ 	if (should_fail_usercopy())
+ 		return len;
+-
++	if(fuzz_copy_from_user_cb((size_t)iter_to, len, 1))
++            return 0;
+ 	from += progress;
+ 	res = copy_to_user_nofault(iter_to, from, len);
+ 	return res < 0 ? len : res;
+@@ -50,6 +53,8 @@
+ 	if (should_fail_usercopy())
+ 		return len;
+ 	if (access_ok(iter_from, len)) {
++		if(fuzz_copy_from_user_cb((size_t)iter_from, len, 1))
++			return 0;
+ 		to += progress;
+ 		instrument_copy_from_user_before(to, iter_from, len);
+ 		res = raw_copy_from_user(to, iter_from, len);
+只在 ../project/FFFuzzer/linux-6.13.8/lib 存在：oid_registry_data.c
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/lib/string.c ../project/FFFuzzer/linux-6.13.8/lib/string.c
+--- ./linux-6.13.8/lib/string.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/lib/string.c	2025-03-24 20:42:07.537164772 +0800
+@@ -30,6 +30,10 @@
+ #include <linux/unaligned.h>
+ #include <asm/word-at-a-time.h>
+ 
++#ifndef _RET_IP_
++#define _RET_IP_ ((unsigned long)__builtin_return_address(0))
++#endif
++
+ #ifndef __HAVE_ARCH_STRNCASECMP
+ /**
+  * strncasecmp - Case insensitive, length-limited string comparison
+@@ -270,13 +274,18 @@
+  */
+ int strcmp(const char *cs, const char *ct)
+ {
++	const char *css=cs;
++	const char *ctt=ct;
+ 	unsigned char c1, c2;
+ 
+ 	while (1) {
+ 		c1 = *cs++;
+ 		c2 = *ct++;
+-		if (c1 != c2)
++		if (c1 != c2) {
++			fuzz_trace_strcmp((uint32_t)_RET_IP_, css, ctt);
+ 			return c1 < c2 ? -1 : 1;
++		}
++			
+ 		if (!c1)
+ 			break;
+ 	}
+@@ -294,13 +303,18 @@
+  */
+ int strncmp(const char *cs, const char *ct, size_t count)
+ {
++	const char *css=cs;
++	const char *ctt=ct;
+ 	unsigned char c1, c2;
+ 
+ 	while (count) {
+ 		c1 = *cs++;
+ 		c2 = *ct++;
+-		if (c1 != c2)
++		if (c1 != c2){
++			fuzz_trace_strcmp((uint32_t)_RET_IP_, css, ctt);
+ 			return c1 < c2 ? -1 : 1;
++		}
++			
+ 		if (!c1)
+ 			break;
+ 		count--;
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/lib/strncpy_from_user.c ../project/FFFuzzer/linux-6.13.8/lib/strncpy_from_user.c
+--- ./linux-6.13.8/lib/strncpy_from_user.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/lib/strncpy_from_user.c	2025-03-24 20:11:37.249639204 +0800
+@@ -122,6 +122,7 @@
+ 
+ 	kasan_check_write(dst, count);
+ 	check_object_size(dst, count, false);
++	fuzz_strncpy_from_user_cb((size_t)src, count-1, 0);
+ 
+ 	if (can_do_masked_user_access()) {
+ 		long retval;
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/lib/usercopy.c ../project/FFFuzzer/linux-6.13.8/lib/usercopy.c
+--- ./linux-6.13.8/lib/usercopy.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/lib/usercopy.c	2025-03-24 20:23:16.613474940 +0800
+@@ -15,6 +15,8 @@
+ #if !defined(INLINE_COPY_FROM_USER) || defined(CONFIG_RUST)
+ unsigned long _copy_from_user(void *to, const void __user *from, unsigned long n)
+ {
++	if(fuzz_copy_from_user_cb((size_t)from, n, 1))
++		return 0;
+ 	return _inline_copy_from_user(to, from, n);
+ }
+ EXPORT_SYMBOL(_copy_from_user);
+@@ -23,6 +25,8 @@
+ #if !defined(INLINE_COPY_TO_USER) || defined(CONFIG_RUST)
+ unsigned long _copy_to_user(void __user *to, const void *from, unsigned long n)
+ {
++	if(fuzz_copy_from_user_cb((size_t)to, n, 1))
++		return 0;
+ 	return _inline_copy_to_user(to, from, n);
+ }
+ EXPORT_SYMBOL(_copy_to_user);
+@@ -53,6 +57,8 @@
+ 	from -= align;
+ 	size += align;
+ 
++	fuzz_copy_from_user_cb((size_t)from, size, false);
++
+ 	if (!user_read_access_begin(from, size))
+ 		return -EFAULT;
+ 
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：linux-6.12.6.config
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.missing-syscalls.d
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/mm/memory.c ../project/FFFuzzer/linux-6.13.8/mm/memory.c
+--- ./linux-6.13.8/mm/memory.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/mm/memory.c	2025-03-24 20:24:34.093454614 +0800
+@@ -2747,6 +2747,12 @@
+ 	err = remap_pfn_range_notrack(vma, addr, pfn, size, prot);
+ 	if (err)
+ 		untrack_pfn(vma, pfn, PAGE_ALIGN(size), true);
++
++	// Tell the fuzzer virtual-device to track all reads from this pfn range
++	// (they can contain user-controlled data)
++	if (current->fuzz_enabled){
++		fuzz_track_pfn_range(pfn, size>>PAGE_SHIFT);
++	}
+ 	return err;
+ }
+ EXPORT_SYMBOL(remap_pfn_range);
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：modules.builtin
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：modules.builtin.modinfo
+只在 ./linux-6.13.8/ 存在：my_kernel_patch.patch
+只在 ../project/FFFuzzer/linux-6.13.8/net/ipv4/netfilter 存在：nf_nat_snmp_basic.asn1.c
+只在 ../project/FFFuzzer/linux-6.13.8/net/ipv4/netfilter 存在：nf_nat_snmp_basic.asn1.h
+只在 ../project/FFFuzzer/linux-6.13.8/net/wireless 存在：shipped-certs.c
+只在 ../project/FFFuzzer/linux-6.13.8/scripts 存在：asn1_compiler
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/basic 存在：fixdep
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/gdb/linux 存在：constants.py
+只在 ../project/FFFuzzer/linux-6.13.8/scripts 存在：kallsyms
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/kconfig 存在：conf
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/kconfig 存在：lexer.lex.c
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/kconfig 存在：mconf
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/kconfig 存在：mconf-bin
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/kconfig 存在：mconf-cflags
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/kconfig 存在：mconf-libs
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/kconfig 存在：parser.tab.c
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/kconfig 存在：parser.tab.h
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/scripts/Makefile.kcov ../project/FFFuzzer/linux-6.13.8/scripts/Makefile.kcov
+--- ./linux-6.13.8/scripts/Makefile.kcov	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/scripts/Makefile.kcov	2025-03-24 20:25:09.789445170 +0800
+@@ -1,6 +1,6 @@
+ # SPDX-License-Identifier: GPL-2.0-only
+ kcov-flags-$(CONFIG_CC_HAS_SANCOV_TRACE_PC)	+= -fsanitize-coverage=trace-pc
+-kcov-flags-$(CONFIG_KCOV_ENABLE_COMPARISONS)	+= -fsanitize-coverage=trace-cmp
++kcov-flags-$(CONFIG_KCOV_ENABLE_COMPARISONS)	+= -fsanitize-coverage=trace-cmp -fsanitize-coverage=trace-gep
+ kcov-flags-$(CONFIG_GCC_PLUGIN_SANCOV)		+= -fplugin=$(objtree)/scripts/gcc-plugins/sancov_plugin.so
+ 
+ export CFLAGS_KCOV := $(kcov-flags-y)
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/mod 存在：devicetable-offsets.h
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/mod 存在：devicetable-offsets.s
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/mod 存在：elfconfig.h
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/mod 存在：mk_elfconfig
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/mod 存在：modpost
+只在 ../project/FFFuzzer/linux-6.13.8/scripts 存在：module.lds
+只在 ../project/FFFuzzer/linux-6.13.8/scripts/selinux/mdp 存在：mdp
+只在 ../project/FFFuzzer/linux-6.13.8/scripts 存在：sorttable
+只在 ../project/FFFuzzer/linux-6.13.8/security/selinux 存在：av_permissions.h
+只在 ../project/FFFuzzer/linux-6.13.8/security/selinux 存在：flask.h
+只在 ../project/FFFuzzer/linux-6.13.8/security/selinux 存在：genheaders
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：System.map
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.tmp_vmlinux0.kallsyms.S
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.tmp_vmlinux0.syms
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.tmp_vmlinux1
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.tmp_vmlinux1.kallsyms.S
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.tmp_vmlinux1.syms
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.tmp_vmlinux2
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.tmp_vmlinux2.kallsyms.S
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.tmp_vmlinux2.syms
+只在 ../project/FFFuzzer/linux-6.13.8/tools/objtool/arch/x86 存在：lib
+diff -ur '--exclude=*.cmd' '--exclude=*.o' '--exclude=*.ko' '--exclude=*.bin' '--exclude=vmlinux' '--exclude=*.a' '--exclude=*.order' '--exclude=.config' '--exclude=Module.symvers' ./linux-6.13.8/tools/objtool/check.c ../project/FFFuzzer/linux-6.13.8/tools/objtool/check.c
+--- ./linux-6.13.8/tools/objtool/check.c	2025-03-23 03:56:59.000000000 +0800
++++ ../project/FFFuzzer/linux-6.13.8/tools/objtool/check.c	2025-03-24 20:25:36.709438017 +0800
+@@ -1211,6 +1211,7 @@
+ 	"__sanitizer_cov_trace_cmp2",
+ 	"__sanitizer_cov_trace_cmp4",
+ 	"__sanitizer_cov_trace_cmp8",
++	"__sanitizer_cov_trace_gep",
+ 	"__sanitizer_cov_trace_switch",
+ 	/* KMSAN */
+ 	"kmsan_copy_to_user",
+只在 ../project/FFFuzzer/linux-6.13.8/tools/objtool 存在：fixdep
+只在 ../project/FFFuzzer/linux-6.13.8/tools/objtool 存在：libsubcmd
+只在 ../project/FFFuzzer/linux-6.13.8/tools/objtool 存在：objtool
+只在 ../project/FFFuzzer/linux-6.13.8/usr 存在：gen_init_cpio
+只在 ../project/FFFuzzer/linux-6.13.8/usr 存在：initramfs_data.cpio
+只在 ../project/FFFuzzer/linux-6.13.8/usr 存在：.initramfs_data.cpio.d
+只在 ../project/FFFuzzer/linux-6.13.8/usr 存在：initramfs_inc_data
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.version
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：.vmlinux.export.c
+只在 ../project/FFFuzzer/linux-6.13.8/ 存在：vmlinux-gdb.py
