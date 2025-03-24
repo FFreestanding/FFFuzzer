@@ -552,13 +552,13 @@ public:
   }
 
   void PrintStats() {
-    for (size_t i = 0; i < Inputs.size(); i++) {
-      const auto &II = *Inputs[i];
-      Printf("  [% 3zd %s] sz: % 5zd runs: % 5zd succ: % 5zd focus: %d\n", i,
-             Sha1ToString(II.Sha1).c_str(), II.U.size(),
-             II.NumExecutedMutations, II.NumSuccessfullMutations,
-             II.HasFocusFunction);
-    }
+    //# for (size_t i = 0; i < Inputs.size(); i++) {
+    //   const auto &II = *Inputs[i];
+    //   Printf("  [% 3zd %s] sz: % 5zd runs: % 5zd succ: % 5zd focus: %d\n", i,
+    //          Sha1ToString(II.Sha1).c_str(), II.U.size(),
+    //          II.NumExecutedMutations, II.NumSuccessfullMutations,
+    //          II.HasFocusFunction);
+    // }
   }
 
   void PrintFeatureSet() {

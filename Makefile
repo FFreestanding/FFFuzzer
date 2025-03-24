@@ -6,7 +6,7 @@ NPROC ?=2
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 PROJECT_ROOT := $(dir $(MKFILE_PATH))
 
-all: image kernelbuild qemubuild libfuzzerng
+all: image kernelbuild qemubuild libfuzzerng agentbuild
 
 # .:: kernel + mod-ng ::.
 kernelbuild: kernel kernel/.config mod-ng

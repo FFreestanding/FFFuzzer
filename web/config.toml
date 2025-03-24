@@ -1,0 +1,9 @@
+qemu_path = "/home/xxx/FFFuzzer/qemu-build/qemu-fuzz-x86_64"
+bzimage_path = "/home/xxx/FFFuzzer/kernel/arch/x86/boot/bzImage"
+image_path = "/home/xxx/FFFuzzer/images/bullseye.img"
+dict_path = "/home/xxx/FFFuzzer/scripts/dict"
+procs = 2
+kernel_src_dir = "/home/xxx/FFFuzzer/kernel"
+work_dir = "/home/xxx/FFFuzzer/work_dir"
+agent_dir = "/home/xxx/FFFuzzer/agent"
+corpus_dir = "/home/xxx/FFFuzzer/CORPUS"

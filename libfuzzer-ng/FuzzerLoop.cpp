@@ -330,35 +330,35 @@ void Fuzzer::RssLimitCallback() {
 
 void Fuzzer::PrintStats(const char *Where, const char *End, size_t Units,
                         size_t Features) {
-  size_t ExecPerSec = execPerSec();
-  if (!Options.Verbosity)
-    return;
-  Printf("#%zd\t%s", TotalNumberOfRuns, Where);
-  if (size_t N = TPC.GetTotalPCCoverage())
-    Printf(" cov: %zd", N);
-  if (size_t N = Features ? Features : Corpus.NumFeatures())
-    Printf(" ft: %zd", N);
-  if (!Corpus.empty()) {
-    Printf(" corp: %zd", Corpus.NumActiveUnits());
-    if (size_t N = Corpus.SizeInBytes()) {
-      if (N < (1 << 14))
-        Printf("/%zdb", N);
-      else if (N < (1 << 24))
-        Printf("/%zdKb", N >> 10);
-      else
-        Printf("/%zdMb", N >> 20);
-    }
-    if (size_t FF = Corpus.NumInputsThatTouchFocusFunction())
-      Printf(" focus: %zd", FF);
-  }
-  if (TmpMaxMutationLen)
-    Printf(" lim: %zd", TmpMaxMutationLen);
-  if (Units)
-    Printf(" units: %zd", Units);
+  // size_t ExecPerSec = execPerSec();
+  // if (!Options.Verbosity)
+  //   return;
+  // Printf("#%zd\t%s", TotalNumberOfRuns, Where);
+  // if (size_t N = TPC.GetTotalPCCoverage())
+  //   Printf(" cov: %zd", N);
+  // if (size_t N = Features ? Features : Corpus.NumFeatures())
+  //   Printf(" ft: %zd", N);
+  // if (!Corpus.empty()) {
+  //   Printf(" corp: %zd", Corpus.NumActiveUnits());
+  //   if (size_t N = Corpus.SizeInBytes()) {
+  //     if (N < (1 << 14))
+  //       Printf("/%zdb", N);
+  //     else if (N < (1 << 24))
+  //       Printf("/%zdKb", N >> 10);
+  //     else
+  //       Printf("/%zdMb", N >> 20);
+  //   }
+  //   if (size_t FF = Corpus.NumInputsThatTouchFocusFunction())
+  //     Printf(" focus: %zd", FF);
+  // }
+  // if (TmpMaxMutationLen)
+  //   Printf(" lim: %zd", TmpMaxMutationLen);
+  // if (Units)
+  //   Printf(" units: %zd", Units);
 
-  Printf(" exec/s: %zd", ExecPerSec);
-  Printf(" rss: %zdMb", GetPeakRSSMb());
-  Printf("%s", End);
+  // Printf(" exec/s: %zd", ExecPerSec);
+  // Printf(" rss: %zdMb", GetPeakRSSMb());
+  // Printf("%s", End);
 }
 
 void Fuzzer::PrintFinalStats() {
@@ -366,8 +366,8 @@ void Fuzzer::PrintFinalStats() {
     TPC.PrintCoverage(/*PrintAllCounters=*/true);
   if (Options.PrintCoverage)
     TPC.PrintCoverage(/*PrintAllCounters=*/false);
-  if (Options.PrintCorpusStats)
-    Corpus.PrintStats();
+  //# if (Options.PrintCorpusStats)
+  //   Corpus.PrintStats();
   if (!Options.PrintFinalStats)
     return;
   size_t ExecPerSec = execPerSec();
@@ -448,17 +448,17 @@ void Fuzzer::RereadOutputCorpus(size_t MaxSize) {
     }
   }
   TscAfterExec = __rdtsc();
-  if (Reloaded){
-    PrintStats("RELOAD");
-  }
+  //# if (Reloaded){
+  //   PrintStats("RELOAD");
+  // }
 }
 
 void Fuzzer::PrintPulseAndReportSlowInput(const uint8_t *Data, size_t Size) {
   auto TimeOfUnit =
       duration_cast<seconds>(UnitStopTime - UnitStartTime).count();
-  if (!(TotalNumberOfRuns & (TotalNumberOfRuns - 1)) &&
-      secondsSinceProcessStartUp() >= 2)
-    PrintStats("pulse ");
+  //# if (!(TotalNumberOfRuns & (TotalNumberOfRuns - 1)) &&
+  //     secondsSinceProcessStartUp() >= 2)
+  //   PrintStats("pulse ");
   auto Threshhold =
       static_cast<long>(static_cast<double>(TimeOfLongestUnitInSeconds) * 1.1);
   if (TimeOfUnit > Threshhold && TimeOfUnit >= Options.ReportSlowUnits) {
@@ -697,14 +697,14 @@ void Fuzzer::WriteUnitToFileWithPrefix(const Unit &U, const char *Prefix) {
 }
 
 void Fuzzer::PrintStatusForNewUnit(const Unit &U, const char *Text) {
-  if (!Options.PrintNEW)
-    return;
-  PrintStats(Text, "");
-  if (Options.Verbosity) {
-    Printf(" L: %zd/%zd ", U.size(), Corpus.MaxInputSize());
-    MD.PrintMutationSequence(Options.Verbosity >= 2);
-    Printf("\n");
-  }
+  // if (!Options.PrintNEW)
+  //   return;
+  //# PrintStats(Text, "");
+  // if (Options.Verbosity) {
+  //   Printf(" L: %zd/%zd ", U.size(), Corpus.MaxInputSize());
+  //   MD.PrintMutationSequence(Options.Verbosity >= 2);
+  //   Printf("\n");
+  // }
 }
 
 void Fuzzer::ReportNewCoverage(InputInfo *II, const Unit &U) {
@@ -889,15 +889,15 @@ void Fuzzer::ReadAndExecuteSeedCorpora(std::vector<SizedFile> &CorporaFiles) {
     }
   }
 
-  PrintStats("INITED");
-  if (!Options.FocusFunction.empty()) {
-    Printf("INFO: %zd/%zd inputs touch the focus function\n",
-           Corpus.NumInputsThatTouchFocusFunction(), Corpus.size());
-    if (!Options.DataFlowTrace.empty())
-      Printf("INFO: %zd/%zd inputs have the Data Flow Trace\n",
-             Corpus.NumInputsWithDataFlowTrace(),
-             Corpus.NumInputsThatTouchFocusFunction());
-  }
+  //# PrintStats("INITED");
+  // if (!Options.FocusFunction.empty()) {
+  //   Printf("INFO: %zd/%zd inputs touch the focus function\n",
+  //          Corpus.NumInputsThatTouchFocusFunction(), Corpus.size());
+  //   if (!Options.DataFlowTrace.empty())
+  //     Printf("INFO: %zd/%zd inputs have the Data Flow Trace\n",
+  //            Corpus.NumInputsWithDataFlowTrace(),
+  //            Corpus.NumInputsThatTouchFocusFunction());
+  // }
 
   if (Corpus.empty() && Options.MaxNumberOfRuns) {
     Printf("ERROR: no interesting inputs were found. "
@@ -954,7 +954,7 @@ void Fuzzer::Loop(std::vector<SizedFile> &CorporaFiles) {
     PurgeAllocator();
   }
 
-  PrintStats("DONE  ", "\n");
+  //# PrintStats("DONE  ", "\n");
   MD.PrintRecommendedDictionary();
 }
 

@@ -1,0 +1,28 @@
+From 485d4657ed2e29a8f4de067300c795b258ae7675 Mon Sep 17 00:00:00 2001
+From: FFreestanding <yuxuanzhe@outlook.com>
+Date: Mon, 24 Mar 2025 18:07:30 +0800
+Subject: [PATCH 4/4] fix pc to pc - 5
+
+---
+ hw/i386/fuzz.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+ mode change 100644 => 100755 hw/i386/fuzz.c
+
+diff --git a/hw/i386/fuzz.c b/hw/i386/fuzz.c
+old mode 100644
+new mode 100755
+index f5077932b5..42c96fc597
+--- a/hw/i386/fuzz.c
++++ b/hw/i386/fuzz.c
+@@ -269,7 +269,7 @@ static void sample_handler(void *opaque)
+ }
+ 
+ static void send_seen_pcs(gpointer key, gpointer value, gpointer user_data) {
+-    uint64_t pc = (uint64_t)key;           // Cast key back to uint64_t
++    uint64_t pc = (uint64_t)key - 5;           // Cast key back to uint64_t
+     // uintptr_t val = (uintptr_t)value;          // Cast value back to integer
+     // 发送实际数据
+     if (send(sock, &pc, sizeof(uint64_t), 0) != sizeof(uint64_t)) {
+-- 
+2.43.0
+

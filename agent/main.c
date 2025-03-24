@@ -79,12 +79,12 @@ uint64_t do_syscall(const scconf* sc, uint32_t* args)
 {
     uint64_t ret = 0;
     pattern_allocs = 0;
-    debug_printf(">>> syscall(%x, %x, %x, %x, %x, %x, %x) = \n", sc->nr, args[0], args[1],
-            args[2], args[3], args[4], args[5]);
+    // printf("syscall(%x, %x, %x, %x, %x, %x, %x) -> ", sc->nr, args[0], args[1],
+    //         args[2], args[3], args[4], args[5]);
     driver_watch();//# 开始fuzz
     ret = syscall(sc->nr, args[0], args[1], args[2], args[3], args[4], args[5]);
     driver_stopwatch();
-    debug_printf(" = %ld\n", ret);
+    // printf("%ld\n", ret);
     return ret;
 }
 

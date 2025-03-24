@@ -5,7 +5,7 @@ use std::collections::{HashSet};
 use std::net::{TcpListener, TcpStream};
 use std::result::Result::Ok;
 use lazy_static::lazy_static;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 use std::path::Path;
@@ -143,11 +143,11 @@ fn spawn_qemu_processes(config: Config) -> web::Data<Vec<Arc<Mutex<std::net::Tcp
         -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
         -drive file=null-co://,if=none,id=drive0 \
         -device nvme,serial=deadbeef,drive=nvm \
-        -serial none -snapshot -cdrom /dev/null",
+        -serial none -snapshot -cdrom /dev/null -serial stdio",// -serial stdio
         &config.bzimage_path,
         &config.image_path,
         &config.agent_dir);
-        println!("{}", qemu_snap_args);
+        // println!("{}", qemu_snap_args);
     } else {
         panic!("KVM is not supported");
     }
@@ -202,8 +202,37 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
             pcs.insert(pc);
         }
     }
+    let coverage_file_path = format!("{}/coverage.txt", &CONFIG_INFO.get().unwrap().work_dir);
 
-    let pcs_count = PCS.lock().unwrap().len();
+    let mut file = OpenOptions::new()
+    .write(true)
+    .append(true)  // Enable append mode
+    .create(true)  // Create file if it doesn't exist
+    .open(coverage_file_path)
+    .expect("无法创建文件");
+
+    let g = PCS.lock().unwrap();
+    for pc in g.iter() {
+        let output = Command::new("addr2line")
+        .args(&[
+            "-e",
+            &format!("{}/{}", &CONFIG_INFO.get().unwrap().kernel_src_dir, "vmlinux"),
+            &format!("{:x}", pc),
+        ])
+        .stdout(Stdio::piped())
+        .output()  // Execute the command and get the output
+        .expect("Failed to execute addr2line");
+        if !output.stderr.is_empty() {
+            println!("write coverage file error: {:?}", output.stderr);
+        } else {
+            println!("{}", &format!("{:x}", pc));
+            // Write the command output to the file
+            file.write_all(&output.stdout)
+                .expect("Failed to write stdout to file");
+        }
+
+    }
+    let pcs_count = g.len();
     HttpResponse::Ok().body(format!("cov: {}", pcs_count))
 }
 

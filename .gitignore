@@ -12,4 +12,3 @@ web/Cargo.lock
 libfuzzer-ng/libFuzzer.a
 agent/*.o
 agent/fuzz
-web/config.toml

@@ -246,10 +246,10 @@ void Fuzzer::CrashResistantMergeInternalStep(const std::string &CFPath,
       });
     TPC.UpdateObservedPCs();
     // Show stats.
-    if (!(TotalNumberOfRuns & (TotalNumberOfRuns - 1)))
-      PrintStatsWrapper("pulse ");
-    if (TotalNumberOfRuns == M.NumFilesInFirstCorpus)
-      PrintStatsWrapper("LOADED");
+    //# if (!(TotalNumberOfRuns & (TotalNumberOfRuns - 1)))
+    //   PrintStatsWrapper("pulse ");
+    //# if (TotalNumberOfRuns == M.NumFilesInFirstCorpus)
+    //   PrintStatsWrapper("LOADED");
     // Write the post-run marker and the coverage.
     OF << "FT " << i;
     for (size_t F : Features)
@@ -263,7 +263,7 @@ void Fuzzer::CrashResistantMergeInternalStep(const std::string &CFPath,
     OF << "\n";
     OF.flush();
   }
-  PrintStatsWrapper("DONE  ");
+  //# PrintStatsWrapper("DONE  ");
 }
 
 // Merges all corpora into the first corpus. A file is added into

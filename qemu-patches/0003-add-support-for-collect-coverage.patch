@@ -1,7 +1,7 @@
-From 8c48991ebbe5a124296b6f7f250013fd0dc90392 Mon Sep 17 00:00:00 2001
+From b6fa5f2fc85f7c7ef81e1f1d36ef266382836e16 Mon Sep 17 00:00:00 2001
 From: FFreestanding <yuxuanzhe@outlook.com>
 Date: Thu, 20 Mar 2025 21:46:56 +0800
-Subject: [PATCH 3/3] add support for collect coverage
+Subject: [PATCH 3/4] add support for collect coverage
 
 ---
  hw/i386/fuzz.c | 94 +++++++++++++++++++++++++++-----------------------
@@ -160,5 +160,5 @@ index 1ddca28d66..f5077932b5 100644
              if (!ignore_cov)
                  libfuzzer_coverage[pc % sizeof(libfuzzer_coverage)]++;
 -- 
-2.45.2
+2.43.0
 
