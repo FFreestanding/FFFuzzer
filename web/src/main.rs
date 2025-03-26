@@ -1,19 +1,22 @@
 use nix::fcntl::{open, OFlag};
 use nix::sys::stat::Mode;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashSet};
+use std::collections::{HashMap, HashSet};
 use std::net::{TcpListener, TcpStream};
 use std::result::Result::Ok;
 use lazy_static::lazy_static;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use anyhow::{Context, Result};
 use std::time::{SystemTime, UNIX_EPOCH};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+
+// Define the coverage module
+mod coverage;
 
 #[derive(Serialize)]
 struct StatusData {
@@ -45,6 +48,8 @@ static CONFIG_INFO: OnceLock<Config> = OnceLock::new();
 // static PCS: Mutex<HashSet<u64>> = Mutex::new(HashSet::new());
 lazy_static! {
     static ref PCS: Mutex<HashSet<u64>> = Mutex::new(HashSet::new());
+    static ref COVERAGE_MAP: Mutex<HashMap<String, HashSet<u32>>> = Mutex::new(HashMap::new());
+    static ref PROCESSED_PCS: Mutex<HashSet<u64>> = Mutex::new(HashSet::new());
 }
 
 fn read_config(file_path: &str) -> Result<Config> {
@@ -66,6 +71,87 @@ fn check_kvm_support() -> bool {
         true
     } else {
         false
+    }
+}
+
+/// Detect whether the CPU is Intel or AMD
+fn detect_cpu_vendor() -> String {
+    let output = Command::new("cat")
+        .arg("/proc/cpuinfo")
+        .stdout(Stdio::piped())
+        .output();
+    
+    match output {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            
+            // Check if "GenuineIntel" is in the output
+            if stdout.contains("GenuineIntel") {
+                return "intel".to_string();
+            }
+            // Check if "AuthenticAMD" is in the output
+            else if stdout.contains("AuthenticAMD") {
+                return "amd".to_string();
+            }
+            // Default to AMD if we can't determine
+            else {
+                println!("Could not determine CPU vendor, defaulting to AMD");
+                return "amd".to_string();
+            }
+        },
+        Err(_) => {
+            println!("Failed to execute 'cat /proc/cpuinfo', defaulting to AMD");
+            return "amd".to_string();
+        }
+    }
+}
+
+/// Get appropriate QEMU args based on CPU vendor
+fn get_qemu_snap_args(config: &Config) -> String {
+    let cpu_vendor = detect_cpu_vendor();
+    
+    if cpu_vendor == "intel" {
+        // Intel-specific arguments
+        format!("-cpu host,kvm=on,svm=on \
+            -machine q35,vmport=off,smbus=off,acpi=off,usb=off,graphics=off -m 1G \
+            -kernel {} \
+            -append 'root=/dev/vda earlyprintk=ttyS0 console=ttyS0 nokaslr silent notsc acpi=off \
+            kvm-intel.nested=1 kvm-intel.unrestricted_guest=1 kvm-intel.vmm_exclusive=1 kvm-intel.fasteoi=1 \
+            kvm-intel.ept=1 kvm-intel.flexpriority=1 kvm-intel.vpid=1 kvm-intel.emulate_invalid_guest_state=1 \
+            kvm-intel.eptad=1 kvm-intel.enable_shadow_vmcs=1 kvm-intel.pml=1 kvm-intel.enable_apicv=1' \
+            -drive file={},id=dr0,format=raw,if=none \
+            -virtfs local,path={},mount_tag=host0,security_model=none,id=host0,readonly=on \
+            -device virtio-blk-pci,drive=dr0 \
+            -nographic -accel kvm -nodefaults \
+            -drive file=null-co://,if=none,id=nvm  -vga virtio \
+            -device megasas,id=scsi0 \
+            -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
+            -drive file=null-co://,if=none,id=drive0 \
+            -device nvme,serial=deadbeef,drive=nvm \
+            -serial none -snapshot -cdrom /dev/null -serial stdio",
+            &config.bzimage_path,
+            &config.image_path,
+            &config.agent_dir)
+    } else {
+        // AMD-specific arguments
+        format!("-cpu host,kvm=on,svm=on \
+        -machine q35,vmport=off,smbus=off,acpi=off,usb=off,graphics=off -m 1G \
+        -kernel {} \
+        -append 'root=/dev/vda earlyprintk=ttyS0 console=ttyS0 nokaslr silent notsc acpi=off \
+        kvm-amd.nested=1 kvm-amd.npt=1 kvm-amd.avic=1 kvm-amd.vls=1 kvm-amd.sev=0' \
+        -drive file={},id=dr0,format=raw,if=none \
+        -virtfs local,path={},mount_tag=host0,security_model=none,id=host0,readonly=on \
+        -device virtio-blk-pci,drive=dr0 \
+        -nographic -accel kvm -nodefaults \
+        -drive file=null-co://,if=none,id=nvm  -vga virtio \
+        -device megasas,id=scsi0 \
+        -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
+        -drive file=null-co://,if=none,id=drive0 \
+        -device nvme,serial=deadbeef,drive=nvm \
+        -serial none -snapshot -cdrom /dev/null -serial stdio",
+        &config.bzimage_path,
+        &config.image_path,
+        &config.agent_dir)
     }
 }
 
@@ -106,51 +192,13 @@ fn run_qemu(config: Config, i: usize, qemu_snap_args: String, port: usize) {
 }
 
 fn spawn_qemu_processes(config: Config) -> web::Data<Vec<Arc<Mutex<std::net::TcpStream>>>> {
-    let qemu_snap_args;
-    if check_kvm_support() {
-        println!("KVM is supported");
-        // qemu_snap_args = format!("-cpu host,kvm=on,svm=on \
-        //     -machine q35,vmport=off,smbus=off,acpi=off,usb=off,graphics=off -m 1G \
-        //     -kernel {} \
-        //     -append 'root=/dev/vda earlyprintk=ttyS0 console=ttyS0 nokaslr silent notsc acpi=off \
-        //     kvm-intel.nested=1 kvm-intel.unrestricted_guest=1 kvm-intel.vmm_exclusive=1 kvm-intel.fasteoi=1 \
-        //     kvm-intel.ept=1 kvm-intel.flexpriority=1 kvm-intel.vpid=1 kvm-intel.emulate_invalid_guest_state=1 \
-        //     kvm-intel.eptad=1 kvm-intel.enable_shadow_vmcs=1 kvm-intel.pml=1 kvm-intel.enable_apicv=1' \
-        //     -drive file={},id=dr0,format=raw,if=none \
-        //     -virtfs local,path={},mount_tag=host0,security_model=none,id=host0,readonly=on \
-        //     -device virtio-blk-pci,drive=dr0 \
-        //     -nographic -accel kvm -nodefaults \
-        //     -drive file=null-co://,if=none,id=nvm  -vga virtio \
-        //     -device megasas,id=scsi0 \
-        //     -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
-        //     -drive file=null-co://,if=none,id=drive0 \
-        //     -device nvme,serial=deadbeef,drive=nvm \
-        //     -serial none -snapshot -cdrom /dev/null",
-        //     &config.bzimage_path,
-        //     &config.image_path,
-        //     &config.agent_dir);
-        qemu_snap_args = format!("-cpu host,kvm=on,svm=on \
-        -machine q35,vmport=off,smbus=off,acpi=off,usb=off,graphics=off -m 1G \
-        -kernel {} \
-        -append 'root=/dev/vda earlyprintk=ttyS0 console=ttyS0 nokaslr silent notsc acpi=off \
-        kvm-amd.nested=1 kvm-amd.npt=1 kvm-amd.avic=1 kvm-amd.vls=1 kvm-amd.sev=0' \
-        -drive file={},id=dr0,format=raw,if=none \
-        -virtfs local,path={},mount_tag=host0,security_model=none,id=host0,readonly=on \
-        -device virtio-blk-pci,drive=dr0 \
-        -nographic -accel kvm -nodefaults \
-        -drive file=null-co://,if=none,id=nvm  -vga virtio \
-        -device megasas,id=scsi0 \
-        -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0 \
-        -drive file=null-co://,if=none,id=drive0 \
-        -device nvme,serial=deadbeef,drive=nvm \
-        -serial none -snapshot -cdrom /dev/null -serial stdio",// -serial stdio
-        &config.bzimage_path,
-        &config.image_path,
-        &config.agent_dir);
-        // println!("{}", qemu_snap_args);
-    } else {
+    if !check_kvm_support() {
         panic!("KVM is not supported");
     }
+    
+    println!("KVM is supported");
+    let qemu_snap_args = get_qemu_snap_args(&config);
+    println!("Using CPU vendor: {}", detect_cpu_vendor());
 
     let mut clients = Vec::new();
     for i in 0..config.procs {
@@ -212,7 +260,18 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
     .expect("无法创建文件");
 
     let g = PCS.lock().unwrap();
+    let mut coverage_map = COVERAGE_MAP.lock().unwrap();
+    let mut processed_pcs = PROCESSED_PCS.lock().unwrap();
+    let mut new_pcs_processed = 0;
+    
     for pc in g.iter() {
+        // Skip PCs we've already processed
+        if processed_pcs.contains(pc) {
+            continue;
+        }
+        
+        new_pcs_processed += 1;
+        
         let output = Command::new("addr2line")
         .args(&[
             "-e",
@@ -222,18 +281,73 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
         .stdout(Stdio::piped())
         .output()  // Execute the command and get the output
         .expect("Failed to execute addr2line");
+        
         if !output.stderr.is_empty() {
             println!("write coverage file error: {:?}", output.stderr);
         } else {
             println!("{}", &format!("{:x}", pc));
-            // Write the command output to the file
-            file.write_all(&output.stdout)
-                .expect("Failed to write stdout to file");
+            
+            // Convert output bytes to string and trim any whitespace
+            if let Ok(output_str) = String::from_utf8(output.stdout) {
+                let output_str = output_str.trim();
+                
+                // Write the command output to the file
+                file.write_all(output_str.as_bytes())
+                    .expect("Failed to write stdout to file");
+                file.write_all(b"\n")
+                    .expect("Failed to write newline to file");
+                
+                // Process the addr2line output
+                if output_str != "??:0" && output_str != "??:?" {
+                    if let Some(index) = output_str.find(':') {
+                        let file_path = &output_str[0..index];
+                        let line_str = &output_str[index+1..];
+                        
+                        // Parse line number as u32
+                        if let Ok(line_num) = line_str.parse::<u32>() {
+                            // Add to our coverage map
+                            let entry = coverage_map.entry(file_path.to_string()).or_insert(HashSet::new());
+                            entry.insert(line_num);
+                        }
+                    }
+                }
+            }
         }
-
+        
+        // Mark this PC as processed
+        processed_pcs.insert(*pc);
     }
+    
+    // Print coverage map for debugging
+    println!("Coverage Map:");
+    for (file, lines) in coverage_map.iter() {
+        println!("File: {} - {} lines covered", file, lines.len());
+    }
+    
+    // Generate HTML report
+    if new_pcs_processed > 0 {
+        let kernel_src_dir = &CONFIG_INFO.get().unwrap().kernel_src_dir;
+        let work_dir = &CONFIG_INFO.get().unwrap().work_dir;
+        coverage::generate_coverage_html(&coverage_map, kernel_src_dir, work_dir);
+    }
+    
     let pcs_count = g.len();
-    HttpResponse::Ok().body(format!("cov: {}", pcs_count))
+    let processed_count = processed_pcs.len();
+    HttpResponse::Ok().body(format!("cov: {}, processed: {}, new: {}", pcs_count, processed_count, new_pcs_processed))
+}
+
+async fn get_coverage_html() -> impl Responder {
+    let work_dir = &CONFIG_INFO.get().unwrap().work_dir;
+    let html_path = coverage::get_coverage_html_path(work_dir);
+    
+    if !Path::new(&html_path).exists() {
+        return HttpResponse::NotFound().body("Coverage report not yet generated");
+    }
+    
+    match fs::read_to_string(&html_path) {
+        Ok(content) => HttpResponse::Ok().content_type("text/html").body(content),
+        Err(_) => HttpResponse::InternalServerError().body("Failed to read coverage report"),
+    }
 }
 
 async fn index() -> impl Responder {
@@ -284,8 +398,9 @@ async fn main() {
         .route("/", web::get().to(index))
         .route("/cov", web::get().to(coverage_handler))
         .route("/status", web::get().to(get_status))
+        .route("/coverage", web::get().to(get_coverage_html))
     })
-    .bind("127.0.0.1:8080").expect("")
+    .bind("0.0.0.0:8080").expect("")
     .run()
     .await;
 
