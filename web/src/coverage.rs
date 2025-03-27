@@ -3,6 +3,35 @@ use std::fs::{self, File};
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 
+/// Convert a list of program counters to file:line mappings using addr2line functionality
+pub fn addr2line(vmlinux_path: &Path, pcs: Vec<u64>) -> Result<HashMap<String, HashSet<u32>>> {
+    let file = fs::File::open(vmlinux_path)?;
+    let map = unsafe { memmap2::Mmap::map(&file)? };
+    let object = object::File::parse(&*map)?;
+    
+    // Load debugging information
+    let ctx = Addr2LineContext::new(&object)?;
+    
+    let mut result: HashMap<String, HashSet<u32>> = HashMap::new();
+    
+    for pc in pcs {
+        if let Ok(mut frames) = ctx.find_frames(pc) {
+            while let Ok(Some(frame)) = frames.next() {
+                if let Some(location) = frame.location {
+                    if let (Some(file), Some(line)) = (location.file, location.line) {
+                        if line > 0 && !file.contains("?") {
+                            let entry = result.entry(file.to_string()).or_insert(HashSet::new());
+                            entry.insert(line as u32);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(result)
+}
+
 /// Generate a report from a coverage file
 pub fn generate_report_from_file(coverage_file: &str, kernel_src_dir: &str, work_dir: &str) -> io::Result<String> {
     // Create the work directory if it doesn't exist
@@ -12,12 +41,10 @@ pub fn generate_report_from_file(coverage_file: &str, kernel_src_dir: &str, work
     
     // Parse the coverage file
     let coverage_map = parse_coverage_file(coverage_file)?;
-    
     println!("Parsed coverage data for {} files", coverage_map.len());
     
     // Generate the HTML report
     generate_combined_html(&coverage_map, kernel_src_dir, work_dir);
-    
     let html_path = get_combined_html_path(work_dir);
     println!("Generated combined HTML coverage report at {}", html_path);
     
@@ -53,7 +80,7 @@ pub fn parse_coverage_file(file_path: &str) -> io::Result<HashMap<String, HashSe
         };
         
         // Extract the relative path from the full path
-        let rel_path = extract_relative_path(full_path);
+        let rel_path = full_path.to_string();
         
         // Add to the coverage map
         coverage_map
@@ -66,24 +93,13 @@ pub fn parse_coverage_file(file_path: &str) -> io::Result<HashMap<String, HashSe
 }
 
 /// Extract the relative path from a full path
-pub fn extract_relative_path(full_path: &str) -> String {
-    // Look for the pattern: /home/achilles/project/FFFuzzer/kernel/kernel/
+/// root_path[-1] == "/"
+pub fn extract_relative_path(full_path: &str, root_path: &str) -> String {
     // and extract the part after it
-    if let Some(pos) = full_path.find("/kernel/") {
-        // Find the second occurrence of "/kernel/"
-        let kernel_prefix = &full_path[..pos+8]; // +8 to include "/kernel/"
-        if let Some(second_pos) = full_path[pos+8..].find("/kernel/") {
-            return full_path[pos+8+second_pos+1..].to_string();
-        }
-        
-        // If we didn't find a second occurrence, just return the part after the first "/kernel/"
-        return full_path[pos+8..].to_string();
-    }
-    
-    // Fallback: just use the file name
-    match full_path.rsplit('/').next() {
-        Some(file_name) => file_name.to_string(),
-        None => full_path.to_string(),
+    if let Some(pos) = full_path.find(root_path) {
+        return full_path[pos+root_path.len()..].to_string();
+    } else {
+        return full_path.to_owned();
     }
 }
 
@@ -658,7 +674,7 @@ body {
 }
 
 .tree-toggle::before {
-    content: '>';
+    content: '\xE2\x96\xB6';
     display: inline-block;
     margin-right: 5px;
     font-size: 0.9em;
@@ -762,9 +778,9 @@ mod tests {
 
     #[test]
     fn generate_combined_coverage_html() {
-        let coverage_file = "/home/xxx/FFFuzzer/work_dir/coverage.txt";
-        let kernel_src_dir = "/home/xxx/FFFuzzer/linux-6.13.8";
-        let work_dir = "/home/xxx/FFFuzzer/work_dir";
+        let coverage_file = "/home/achilles/project/FFFuzzer/work_dir/coverage_copy.txt";
+        let kernel_src_dir = "/home/achilles/project/FFFuzzer/linux-6.13.8";
+        let work_dir = "/home/achilles/project/FFFuzzer/work_dir";
         
         generate_report_from_file(coverage_file, kernel_src_dir, work_dir).unwrap();
     }

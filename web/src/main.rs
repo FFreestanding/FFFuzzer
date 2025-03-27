@@ -1,3 +1,4 @@
+use coverage::extract_relative_path;
 use nix::fcntl::{open, OFlag};
 use nix::sys::stat::Mode;
 use serde::{Deserialize, Serialize};
@@ -8,12 +9,13 @@ use lazy_static::lazy_static;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use anyhow::{Context, Result};
 use std::time::{SystemTime, UNIX_EPOCH};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use addr2line::{Context as Addr2LineContext, gimli, object::Object, object::ObjectSection};
 
 // Define the coverage module
 mod coverage;
@@ -49,7 +51,6 @@ static CONFIG_INFO: OnceLock<Config> = OnceLock::new();
 lazy_static! {
     static ref PCS: Mutex<HashSet<u64>> = Mutex::new(HashSet::new());
     static ref COVERAGE_MAP: Mutex<HashMap<String, HashSet<u32>>> = Mutex::new(HashMap::new());
-    static ref PROCESSED_PCS: Mutex<HashSet<u64>> = Mutex::new(HashSet::new());
 }
 
 fn read_config(file_path: &str) -> Result<Config> {
@@ -66,12 +67,8 @@ fn check_kvm_support() -> bool {
     if !Path::new(kvm_path).exists() {
         return false;
     }
-    // 尝试打开 /dev/kvm 检查权限
-    if open(kvm_path, OFlag::O_RDWR, Mode::empty()).is_ok(){
-        true
-    } else {
-        false
-    }
+    
+    open(kvm_path, OFlag::O_RDWR, Mode::empty()).is_ok()
 }
 
 /// Detect whether the CPU is Intel or AMD
@@ -85,17 +82,13 @@ fn detect_cpu_vendor() -> String {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             
-            // Check if "GenuineIntel" is in the output
             if stdout.contains("GenuineIntel") {
-                return "intel".to_string();
-            }
-            // Check if "AuthenticAMD" is in the output
-            else if stdout.contains("AuthenticAMD") {
-                return "amd".to_string();
-            }
-            // Default to AMD if we can't determine
-            else {
-                panic!("Could not determine CPU vendor, defaulting to AMD");
+                "intel".to_string()
+            } else if stdout.contains("AuthenticAMD") {
+                "amd".to_string()
+            } else {
+                println!("Could not determine CPU vendor, defaulting to AMD");
+                "amd".to_string()
             }
         },
         Err(_) => {
@@ -167,26 +160,30 @@ fn run_qemu(config: Config, i: usize, qemu_snap_args: String, port: usize) {
     let log_file = log_file.unwrap();
     let _ = thread::spawn(move || {
         let handle = Command::new(&config.qemu_path)
-        .args(&[
-            "-rss_limit_mb=8096",
-            "-use_value_profile=1",
-            "-detect_leaks=0",
-            &format!("-dict={}", &config.dict_path),
-            "-len_control=200", "-reload=60",
-            &config.corpus_dir,
-        ])
-        .env("QEMU_SNAP_ARGS", &qemu_snap_args)
-        .env("FUZZ_ID", i.to_string())
-        .env("PORT", port.to_string())
-        .env("WORK_DIR", &config.work_dir)
-        .env("FUZZ_TRACE_PC", "1")
-        .env("PRINT_ALL_PCS", "1")
-        .env("MUTATE_SYSCALLS", "1")
-        .env("PRINT_CRASHES", "1")
-        .stdout(Stdio::from(log_file.try_clone().expect("Failed to clone log file for stdout")))
-        .stderr(Stdio::from(log_file.try_clone().expect("Failed to clone log file for stderr")))
-        .spawn().expect(&format!("Spawned QEMU process {} error", i));
-        println!("Spawned QEMU process {} (PID: {})", i, handle.id());
+            .args(&[
+                "-rss_limit_mb=8096",
+                "-use_value_profile=1",
+                "-detect_leaks=0",
+                &format!("-dict={}", &config.dict_path),
+                "-len_control=200", "-reload=60",
+                &config.corpus_dir,
+            ])
+            .env("QEMU_SNAP_ARGS", &qemu_snap_args)
+            .env("FUZZ_ID", i.to_string())
+            .env("PORT", port.to_string())
+            .env("WORK_DIR", &config.work_dir)
+            .env("FUZZ_TRACE_PC", "1")
+            .env("PRINT_ALL_PCS", "1")
+            .env("MUTATE_SYSCALLS", "1")
+            .env("PRINT_CRASHES", "1")
+            .stdout(Stdio::from(log_file.try_clone().expect("Failed to clone log file for stdout")))
+            .stderr(Stdio::from(log_file.try_clone().expect("Failed to clone log file for stderr")))
+            .spawn();
+            
+        match handle {
+            Ok(proc) => println!("Spawned QEMU process {} (PID: {})", i, proc.id()),
+            Err(e) => eprintln!("Failed to spawn QEMU process {}: {}", i, e),
+        }
     });
 }
 
@@ -210,6 +207,17 @@ fn spawn_qemu_processes(config: Config) -> web::Data<Vec<Arc<Mutex<std::net::Tcp
 }
 
 async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> impl Responder {
+    let mut pcs = PCS.lock().unwrap();
+    let mut new_pcs = Vec::new();
+    let mut coverage_map = COVERAGE_MAP.lock().unwrap();
+    let coverage_file_path = format!("{}/coverage.txt", &CONFIG_INFO.get().unwrap().work_dir);
+    let mut file = OpenOptions::new()
+    .write(true)
+    .append(true)  // Enable append mode
+    .create(true)  // Create file if it doesn't exist
+    .open(coverage_file_path)
+    .expect("无法创建文件");
+
     for client in clients.iter() {
         let mut stream = client.lock().unwrap();
         if let Err(e) = stream.write_all(&[CMD::NeedCov as u8]) {
@@ -218,7 +226,7 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
         }
         stream.flush().unwrap();
     }
-
+    
     for client in clients.iter() {
         let mut stream = client.lock().unwrap();
         let mut len_buf = [0; 8];
@@ -241,90 +249,52 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
         }
         println!("Received data ({} bytes)", data_len);
 
-        let mut pcs = PCS.lock().unwrap();
         for chunk in data.chunks_exact(8) {
             let pc = u64::from_le_bytes(chunk.try_into().unwrap());
-            pcs.insert(pc);
+            if pcs.insert(pc) {
+                new_pcs.push(pc);
+            }
         }
     }
-    let coverage_file_path = format!("{}/coverage.txt", &CONFIG_INFO.get().unwrap().work_dir);
-
-    let mut file = OpenOptions::new()
-    .write(true)
-    .append(true)  // Enable append mode
-    .create(true)  // Create file if it doesn't exist
-    .open(coverage_file_path)
-    .expect("无法创建文件");
-
-    let g = PCS.lock().unwrap();
-    let mut coverage_map = COVERAGE_MAP.lock().unwrap();
-    let mut processed_pcs = PROCESSED_PCS.lock().unwrap();
-    let mut new_pcs_processed = 0;
     
-    for pc in g.iter() {
-        // Skip PCs we've already processed
-        if processed_pcs.contains(pc) {
-            continue;
-        }
+    // Process new PCs using our Rust addr2line function
+    if !new_pcs.is_empty() {
+        let kernel_src_dir = &CONFIG_INFO.get().unwrap().kernel_src_dir;
+        let vmlinux_path = PathBuf::from(kernel_src_dir).join("vmlinux");
         
-        new_pcs_processed += 1;
-        
-        let output = Command::new("addr2line")
-        .args(&[
-            "-e",
-            &format!("{}/{}", &CONFIG_INFO.get().unwrap().kernel_src_dir, "vmlinux"),
-            &format!("{:x}", pc),
-        ])
-        .stdout(Stdio::piped())
-        .output()  // Execute the command and get the output
-        .expect("Failed to execute addr2line");
-        
-        if !output.stderr.is_empty() {
-            println!("write coverage file error: {:?}", output.stderr);
-        } else {
-            println!("{}", &format!("{:x}", pc));
-            
-            // Convert output bytes to string and trim any whitespace
-            if let Ok(output_str) = String::from_utf8(output.stdout) {
-                let output_str = output_str.trim();
-                
-                // Write the command output to the file
-                file.write_all(output_str.as_bytes())
-                    .expect("Failed to write stdout to file");
-                file.write_all(b"\n")
-                    .expect("Failed to write newline to file");
-                
-                // Process the addr2line output
-                if output_str != "??:0" && output_str != "??:?" {
-                    if let Some(index) = output_str.find(':') {
-                        let file_path = &output_str[0..index];
-                        let line_str = &output_str[index+1..];
-                        
-                        // Parse line number as u32
-                        if let Ok(line_num) = line_str.parse::<u32>() {
-                            // Add to our coverage map
-                            let entry = coverage_map.entry(file_path.to_string()).or_insert(HashSet::new());
-                            entry.insert(line_num);
+        match addr2line(&vmlinux_path, new_pcs) {
+            Ok(new_coverage) => {
+                for (file_path, lines) in new_coverage {
+                    // Extract relative path for the coverage file
+                    let relative_path = extract_relative_path(&file_path, kernel_src_dir);
+                    // Add to our coverage map
+                    let entry = coverage_map.entry(relative_path.clone()).or_insert(HashSet::new());
+                    for line in &lines {
+                        entry.insert(*line);
+
+                        let content = format!("{}:{}\n", relative_path, line);
+                        // Write to coverage file
+                        if let Err(e) = file.write_all(content.as_bytes()) {
+                            println!("Failed to write to coverage file: {}", e);
                         }
                     }
                 }
+            },
+            Err(e) => {
+                println!("Error processing addresses with addr2line: {}", e);
             }
         }
-        
-        // Mark this PC as processed
-        processed_pcs.insert(*pc);
     }
-    
+
     // Generate HTML report
-    if new_pcs_processed > 0 {
+    if new_pcs.len() > 0 {
         let kernel_src_dir = &CONFIG_INFO.get().unwrap().kernel_src_dir;
         let work_dir = &CONFIG_INFO.get().unwrap().work_dir;
         coverage::generate_combined_html(&coverage_map, kernel_src_dir, work_dir);
     }
     
-    let pcs_count = g.len();
-    let processed_count = processed_pcs.len();
-    HttpResponse::Ok().body(format!("cov: {}, processed: {}, new: {}", pcs_count, processed_count, new_pcs_processed))
+    let pcs_count = pcs.len();
+    HttpResponse::Ok().body(format!("cov: {}, new: {}", pcs_count, new_pcs.len()))
 }
 
 async fn index() -> impl Responder {
