@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::process::{Command, Stdio};
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use anyhow::{Context, Result};
@@ -95,13 +95,11 @@ fn detect_cpu_vendor() -> String {
             }
             // Default to AMD if we can't determine
             else {
-                println!("Could not determine CPU vendor, defaulting to AMD");
-                return "amd".to_string();
+                panic!("Could not determine CPU vendor, defaulting to AMD");
             }
         },
         Err(_) => {
-            println!("Failed to execute 'cat /proc/cpuinfo', defaulting to AMD");
-            return "amd".to_string();
+            panic!("Failed to execute 'cat /proc/cpuinfo', defaulting to AMD");
         }
     }
 }
@@ -109,7 +107,8 @@ fn detect_cpu_vendor() -> String {
 /// Get appropriate QEMU args based on CPU vendor
 fn get_qemu_snap_args(config: &Config) -> String {
     let cpu_vendor = detect_cpu_vendor();
-    
+    println!("Using CPU vendor: {}", cpu_vendor);
+
     if cpu_vendor == "intel" {
         // Intel-specific arguments
         format!("-cpu host,kvm=on,svm=on \
@@ -198,7 +197,6 @@ fn spawn_qemu_processes(config: Config) -> web::Data<Vec<Arc<Mutex<std::net::Tcp
     
     println!("KVM is supported");
     let qemu_snap_args = get_qemu_snap_args(&config);
-    println!("Using CPU vendor: {}", detect_cpu_vendor());
 
     let mut clients = Vec::new();
     for i in 0..config.procs {
@@ -212,7 +210,6 @@ fn spawn_qemu_processes(config: Config) -> web::Data<Vec<Arc<Mutex<std::net::Tcp
 }
 
 async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> impl Responder {
-    println!("coverage_handler");
     for client in clients.iter() {
         let mut stream = client.lock().unwrap();
         if let Err(e) = stream.write_all(&[CMD::NeedCov as u8]) {
@@ -318,36 +315,16 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
         processed_pcs.insert(*pc);
     }
     
-    // Print coverage map for debugging
-    println!("Coverage Map:");
-    for (file, lines) in coverage_map.iter() {
-        println!("File: {} - {} lines covered", file, lines.len());
-    }
-    
     // Generate HTML report
     if new_pcs_processed > 0 {
         let kernel_src_dir = &CONFIG_INFO.get().unwrap().kernel_src_dir;
         let work_dir = &CONFIG_INFO.get().unwrap().work_dir;
-        coverage::generate_coverage_html(&coverage_map, kernel_src_dir, work_dir);
+        coverage::generate_combined_html(&coverage_map, kernel_src_dir, work_dir);
     }
     
     let pcs_count = g.len();
     let processed_count = processed_pcs.len();
     HttpResponse::Ok().body(format!("cov: {}, processed: {}, new: {}", pcs_count, processed_count, new_pcs_processed))
-}
-
-async fn get_coverage_html() -> impl Responder {
-    let work_dir = &CONFIG_INFO.get().unwrap().work_dir;
-    let html_path = coverage::get_coverage_html_path(work_dir);
-    
-    if !Path::new(&html_path).exists() {
-        return HttpResponse::NotFound().body("Coverage report not yet generated");
-    }
-    
-    match fs::read_to_string(&html_path) {
-        Ok(content) => HttpResponse::Ok().content_type("text/html").body(content),
-        Err(_) => HttpResponse::InternalServerError().body("Failed to read coverage report"),
-    }
 }
 
 async fn index() -> impl Responder {
@@ -398,11 +375,8 @@ async fn main() {
         .route("/", web::get().to(index))
         .route("/cov", web::get().to(coverage_handler))
         .route("/status", web::get().to(get_status))
-        .route("/coverage", web::get().to(get_coverage_html))
     })
     .bind("0.0.0.0:8080").expect("")
     .run()
     .await;
-
-    // Ok(())
 }

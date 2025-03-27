@@ -9,6 +9,8 @@ qemu/
 work_dir/
 web/target/
 web/Cargo.lock
+web/config.toml
 libfuzzer-ng/libFuzzer.a
 agent/*.o
 agent/fuzz
+linux-6.13.8
