@@ -1,4 +1,3 @@
-use coverage::extract_relative_path;
 use nix::fcntl::{open, OFlag};
 use nix::sys::stat::Mode;
 use serde::{Deserialize, Serialize};
@@ -15,7 +14,7 @@ use std::thread;
 use anyhow::{Context, Result};
 use std::time::{SystemTime, UNIX_EPOCH};
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use addr2line::{Context as Addr2LineContext, gimli, object::Object, object::ObjectSection};
+use crate::coverage::addr2line;
 
 // Define the coverage module
 mod coverage;
@@ -207,7 +206,15 @@ fn spawn_qemu_processes(config: Config) -> web::Data<Vec<Arc<Mutex<std::net::Tcp
 }
 
 async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> impl Responder {
-    let mut pcs = PCS.lock().unwrap();
+    let pcs_result = PCS.lock();
+    let mut pcs;
+    match pcs_result {
+        Ok(p) => pcs = p,
+        Err(e) =>{ 
+            println!("coverage_handler: {}", e);
+            return HttpResponse::Ok().body(format!("coverage_handler: {}", e));
+        },
+    };
     let mut new_pcs = Vec::new();
     let mut coverage_map = COVERAGE_MAP.lock().unwrap();
     let coverage_file_path = format!("{}/coverage.txt", &CONFIG_INFO.get().unwrap().work_dir);
@@ -262,11 +269,10 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
         let kernel_src_dir = &CONFIG_INFO.get().unwrap().kernel_src_dir;
         let vmlinux_path = PathBuf::from(kernel_src_dir).join("vmlinux");
         
-        match addr2line(&vmlinux_path, new_pcs) {
+        match addr2line(&vmlinux_path, new_pcs.clone(), &kernel_src_dir) {
             Ok(new_coverage) => {
-                for (file_path, lines) in new_coverage {
-                    // Extract relative path for the coverage file
-                    let relative_path = extract_relative_path(&file_path, kernel_src_dir);
+                for (relative_path, lines) in new_coverage {
+                    
                     // Add to our coverage map
                     let entry = coverage_map.entry(relative_path.clone()).or_insert(HashSet::new());
                     for line in &lines {
@@ -282,19 +288,26 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
             },
             Err(e) => {
                 println!("Error processing addresses with addr2line: {}", e);
+                return HttpResponse::Ok().body(format!("coverage_handler: {}", e))
             }
         }
     }
 
+    let work_dir = &CONFIG_INFO.get().unwrap().work_dir;
     // Generate HTML report
     if new_pcs.len() > 0 {
         let kernel_src_dir = &CONFIG_INFO.get().unwrap().kernel_src_dir;
-        let work_dir = &CONFIG_INFO.get().unwrap().work_dir;
         coverage::generate_combined_html(&coverage_map, kernel_src_dir, work_dir);
     }
     
-    let pcs_count = pcs.len();
-    HttpResponse::Ok().body(format!("cov: {}, new: {}", pcs_count, new_pcs.len()))
+    // let pcs_count = pcs.len();
+    // HttpResponse::Ok().body(format!("cov: {}, new: {}", pcs_count, new_pcs.len()))
+    match std::fs::read_to_string(format!("{}/coverage_report.html", work_dir)) {
+        Ok(content) => HttpResponse::Ok()
+            .content_type("text/html")
+            .body(content),
+        Err(_) => HttpResponse::InternalServerError().body("Failed to load index.html"),
+    }
 }
 
 async fn index() -> impl Responder {

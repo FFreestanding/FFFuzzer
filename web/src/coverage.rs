@@ -2,29 +2,28 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{self, BufRead, Write};
 use std::path::Path;
+use std::error::Error;
 
-/// Convert a list of program counters to file:line mappings using addr2line functionality
-pub fn addr2line(vmlinux_path: &Path, pcs: Vec<u64>) -> Result<HashMap<String, HashSet<u32>>> {
+pub fn addr2line(vmlinux_path: &Path, pcs: Vec<u64>, kernel_src_dir: &String) -> Result<HashMap<String, HashSet<u32>>, Box<dyn Error>> {
     let file = fs::File::open(vmlinux_path)?;
     let map = unsafe { memmap2::Mmap::map(&file)? };
     let object = object::File::parse(&*map)?;
     
     // Load debugging information
-    let ctx = Addr2LineContext::new(&object)?;
+    let ctx = addr2line::Context::new(&object)?;
     
     let mut result: HashMap<String, HashSet<u32>> = HashMap::new();
     
     for pc in pcs {
-        if let Ok(mut frames) = ctx.find_frames(pc) {
-            while let Ok(Some(frame)) = frames.next() {
-                if let Some(location) = frame.location {
-                    if let (Some(file), Some(line)) = (location.file, location.line) {
-                        if line > 0 && !file.contains("?") {
-                            let entry = result.entry(file.to_string()).or_insert(HashSet::new());
-                            entry.insert(line as u32);
-                        }
-                    }
-                }
+        let mut frames = ctx.find_frames(pc).skip_all_loads().unwrap();
+        while let Ok(Some(frame)) = frames.next() {
+            let Some(location) = frame.location else { continue };
+            let Some(file) = location.file else { continue };
+            let Some(line) = location.line else { continue };
+            if line > 0 && !file.contains("?") {
+                // Extract relative path for the coverage file
+                let relative_path = extract_relative_path(&file, kernel_src_dir).replace("./", "");
+                result.entry(relative_path).or_insert(HashSet::new()).insert(line as u32);
             }
         }
     }
@@ -773,14 +772,12 @@ pub fn html_escape(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
-    use std::io::Write;
 
     #[test]
     fn generate_combined_coverage_html() {
-        let coverage_file = "/home/achilles/project/FFFuzzer/work_dir/coverage_copy.txt";
-        let kernel_src_dir = "/home/achilles/project/FFFuzzer/linux-6.13.8";
-        let work_dir = "/home/achilles/project/FFFuzzer/work_dir";
+        let coverage_file = "/home/xxx/FFFuzzer/work_dir/coverage_copy.txt";
+        let kernel_src_dir = "/home/xxx/FFFuzzer/linux-6.13.8";
+        let work_dir = "/home/xxx/FFFuzzer/work_dir";
         
         generate_report_from_file(coverage_file, kernel_src_dir, work_dir).unwrap();
     }
