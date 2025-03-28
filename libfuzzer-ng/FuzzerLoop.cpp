@@ -198,7 +198,7 @@ void Fuzzer::DumpCurrentUnit(const char *Prefix) {
 
 NO_SANITIZE_MEMORY
 void Fuzzer::DeathCallback() {
-  DumpCurrentUnit("crash-");
+  //# DumpCurrentUnit("crash-");
   PrintFinalStats();
 }
 
@@ -243,7 +243,7 @@ void Fuzzer::CrashCallback() {
          "      Combine libFuzzer with AddressSanitizer or similar for better "
          "crash reports.\n");
   Printf("SUMMARY: libFuzzer: deadly signal\n");
-  DumpCurrentUnit("crash-");
+  //# DumpCurrentUnit("crash-");
   PrintFinalStats();
   _Exit(Options.ErrorExitCode); // Stop right now.
 }
@@ -257,7 +257,7 @@ void Fuzzer::ExitCallback() {
   Printf("==%lu== ERROR: libFuzzer: fuzz target exited\n", GetPid());
   PrintStackTrace();
   Printf("SUMMARY: libFuzzer: fuzz target exited\n");
-  DumpCurrentUnit("crash-");
+  //# DumpCurrentUnit("crash-");
   PrintFinalStats();
   _Exit(Options.ErrorExitCode);
 }
@@ -618,7 +618,7 @@ void Fuzzer::CrashOnOverwrittenData() {
          GetPid());
   PrintStackTrace();
   Printf("SUMMARY: libFuzzer: overwrites-const-input\n");
-  DumpCurrentUnit("crash-");
+  //# DumpCurrentUnit("crash-");
   PrintFinalStats();
   _Exit(Options.ErrorExitCode); // Stop right now.
 }

@@ -94,8 +94,12 @@ pub fn parse_coverage_file(file_path: &str) -> io::Result<HashMap<String, HashSe
 /// Extract the relative path from a full path
 /// root_path[-1] == "/"
 pub fn extract_relative_path(full_path: &str, root_path: &str) -> String {
+    let mut root_path = root_path.to_string();
+    if !root_path.ends_with("/") {
+        root_path = root_path + "/";
+    }
     // and extract the part after it
-    if let Some(pos) = full_path.find(root_path) {
+    if let Some(pos) = full_path.find(&root_path) {
         return full_path[pos+root_path.len()..].to_string();
     } else {
         return full_path.to_owned();

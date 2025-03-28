@@ -223,7 +223,7 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
     .append(true)  // Enable append mode
     .create(true)  // Create file if it doesn't exist
     .open(coverage_file_path)
-    .expect("无法创建文件");
+    .expect("unable to open coverage file");
 
     for client in clients.iter() {
         let mut stream = client.lock().unwrap();
@@ -244,6 +244,10 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
         let data_len = usize::from_le_bytes(len_buf); // Match QEMU's little-endian
         println!("Receiving data ({} bytes)", data_len);
 
+        if data_len == 0 {
+            continue;
+        }
+
         if data_len % 8 != 0 {
             println!("Invalid data length: {}", data_len);
             continue;
@@ -263,9 +267,10 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
             }
         }
     }
-    
+
     // Process new PCs using our Rust addr2line function
     if !new_pcs.is_empty() {
+        println!("!new_pcs.is_empty()");
         let kernel_src_dir = &CONFIG_INFO.get().unwrap().kernel_src_dir;
         let vmlinux_path = PathBuf::from(kernel_src_dir).join("vmlinux");
         
@@ -279,6 +284,7 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
                         entry.insert(*line);
 
                         let content = format!("{}:{}\n", relative_path, line);
+                        println!("{}", content);
                         // Write to coverage file
                         if let Err(e) = file.write_all(content.as_bytes()) {
                             println!("Failed to write to coverage file: {}", e);
@@ -292,21 +298,20 @@ async fn coverage_handler(clients: web::Data<Vec<Arc<Mutex<TcpStream>>>>) -> imp
             }
         }
     }
-
     let work_dir = &CONFIG_INFO.get().unwrap().work_dir;
     // Generate HTML report
     if new_pcs.len() > 0 {
         let kernel_src_dir = &CONFIG_INFO.get().unwrap().kernel_src_dir;
         coverage::generate_combined_html(&coverage_map, kernel_src_dir, work_dir);
     }
-    
-    // let pcs_count = pcs.len();
-    // HttpResponse::Ok().body(format!("cov: {}, new: {}", pcs_count, new_pcs.len()))
+
     match std::fs::read_to_string(format!("{}/coverage_report.html", work_dir)) {
-        Ok(content) => HttpResponse::Ok()
+        Ok(content) => {
+            HttpResponse::Ok()
             .content_type("text/html")
-            .body(content),
-        Err(_) => HttpResponse::InternalServerError().body("Failed to load index.html"),
+            .body(content)
+        },
+        Err(_) => HttpResponse::InternalServerError().body("Failed to load coverage_report.html"),
     }
 }
 
